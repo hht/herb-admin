@@ -1,3 +1,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --td-brand-color-1: #e9f8e9;
+  --td-brand-color-2: #d3efd7;
+  --td-brand-color-3: #a8d6b3;
+  --td-brand-color-4: #7cbb8f;
+  --td-brand-color-5: #5d9f73;
+  --td-brand-color-6: #398557;
+  --td-brand-color-7: #267347;
+  --td-brand-color-8: #00532b;
+  --td-brand-color-9: #003c1d;
+  --td-brand-color-10: #002610;
+  --td-brand-color-light: var(--td-brand-color-1);
+  --td-brand-color-focus: var(--td-brand-color-2);
+  --td-brand-color-disabled: var(--td-brand-color-3);
+  --td-brand-color-hover: var(--td-brand-color-6);
+  --td-brand-color: var(--td-brand-color-7);
+  --td-brand-color-active: var(--td-brand-color-8);
+}
