@@ -9,12 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AboutRouteImport } from './routes/about'
+import { Route as HerbRouteRouteImport } from './routes/_herb/route'
+import { Route as AnonRouteRouteImport } from './routes/_anon/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as HerbDashboardRouteRouteImport } from './routes/_herb/dashboard/route'
+import { Route as AnonAuthRouteRouteImport } from './routes/_anon/auth/route'
 
-const AboutRoute = AboutRouteImport.update({
-  id: '/about',
-  path: '/about',
+const HerbRouteRoute = HerbRouteRouteImport.update({
+  id: '/_herb',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnonRouteRoute = AnonRouteRouteImport.update({
+  id: '/_anon',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -22,40 +28,69 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HerbDashboardRouteRoute = HerbDashboardRouteRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => HerbRouteRoute,
+} as any)
+const AnonAuthRouteRoute = AnonAuthRouteRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => AnonRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
+  '/auth': typeof AnonAuthRouteRoute
+  '/dashboard': typeof HerbDashboardRouteRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
+  '/auth': typeof AnonAuthRouteRoute
+  '/dashboard': typeof HerbDashboardRouteRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
+  '/_anon': typeof AnonRouteRouteWithChildren
+  '/_herb': typeof HerbRouteRouteWithChildren
+  '/_anon/auth': typeof AnonAuthRouteRoute
+  '/_herb/dashboard': typeof HerbDashboardRouteRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about'
+  fullPaths: '/' | '/auth' | '/dashboard'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about'
-  id: '__root__' | '/' | '/about'
+  to: '/' | '/auth' | '/dashboard'
+  id:
+    | '__root__'
+    | '/'
+    | '/_anon'
+    | '/_herb'
+    | '/_anon/auth'
+    | '/_herb/dashboard'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AboutRoute: typeof AboutRoute
+  AnonRouteRoute: typeof AnonRouteRouteWithChildren
+  HerbRouteRoute: typeof HerbRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/about': {
-      id: '/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof AboutRouteImport
+    '/_herb': {
+      id: '/_herb'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof HerbRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_anon': {
+      id: '/_anon'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof AnonRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -65,12 +100,51 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_herb/dashboard': {
+      id: '/_herb/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof HerbDashboardRouteRouteImport
+      parentRoute: typeof HerbRouteRoute
+    }
+    '/_anon/auth': {
+      id: '/_anon/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AnonAuthRouteRouteImport
+      parentRoute: typeof AnonRouteRoute
+    }
   }
 }
 
+interface AnonRouteRouteChildren {
+  AnonAuthRouteRoute: typeof AnonAuthRouteRoute
+}
+
+const AnonRouteRouteChildren: AnonRouteRouteChildren = {
+  AnonAuthRouteRoute: AnonAuthRouteRoute,
+}
+
+const AnonRouteRouteWithChildren = AnonRouteRoute._addFileChildren(
+  AnonRouteRouteChildren,
+)
+
+interface HerbRouteRouteChildren {
+  HerbDashboardRouteRoute: typeof HerbDashboardRouteRoute
+}
+
+const HerbRouteRouteChildren: HerbRouteRouteChildren = {
+  HerbDashboardRouteRoute: HerbDashboardRouteRoute,
+}
+
+const HerbRouteRouteWithChildren = HerbRouteRoute._addFileChildren(
+  HerbRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AboutRoute: AboutRoute,
+  AnonRouteRoute: AnonRouteRouteWithChildren,
+  HerbRouteRoute: HerbRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

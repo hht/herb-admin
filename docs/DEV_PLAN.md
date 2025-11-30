@@ -4,12 +4,10 @@
 
 ### 0. 登录与会话管理
 - **Figma 节点**：`764:37999`（账号密码登录）、`764:38081` 等登录变体（待解析）。
-- **API**：`POST /dft/sys-login`、`POST /dft/sys-sms/*`、`POST /dft/sys-register`、`POST /dft/app/user/password/*`、`GET /auth/roles`、`GET /auth/permissions`。
-- **任务**：
-  1. 构建账号/验证码登录表单（TDesign Form + Zod），复刻 `764:37999` 视觉，包括“记住账号”“短信登录”“注册”入口。
-  2. 编写 `authService`（登录/登出/刷新 token），`authSlice` 存储 `{token, refreshToken, storeId, roles, permissions, expiresAt}` 并集成 Zustand 持久化。
-  3. Axios 拦截器接入 token 续期与 401 处理；失败 5 次锁定账号并记录 `/audit/logs`。
-  4. 登录成功后拉取权限菜单，驱动 `PermissionGuard` 与左侧导航。
+- **API**：`POST /dft/login`（帐号密码登录）、`POST /dft/smsLogin`、`POST /dft/sys-register`、`POST /dft/app/user/password/*`、`GET /auth/roles`、`GET /auth/permissions`。
+- **代码映射**：`src/routes/_anon/auth/route.tsx`（Tailwind 登录页面）、`src/services/auth.ts`（登录请求 + Zod）、`src/hooks/useStore.tsx`（Zustand 会话）、`src/routes/__root.tsx`（登出入口 & 导航）。
+- **当前实现**：`/auth` 路由已上线，使用 Tailwind 表单 + Zod 校验，记住账号持久化到 `localStorage` (`herb:last-account`)，会话写入 Zustand 并持久化；首页/业务路由均通过 beforeLoad 检查，Root Header 仅显示“控制台 + 退出”链接。
+- **剩余任务**：短信登录、验证码发送、登录后自动拉取权限菜单仍待实现；失败计数/锁定逻辑与 `/audit/logs` 记录需在安全专项中补齐。
 - **验收**：登录/登出/失效重登流程完整；非法凭据提示；权限下发后导航刷新。
 
 ### 1. 全局布局与导航（后台壳层）

@@ -83,19 +83,19 @@
 #### 11.0 用户登录与会话管理
 
 - **目标**：提供账号/密码与验证码登录、会话维持、权限同步与登录日志。
-- **UI/交互要点**：参照 Figma 登录/欢迎页（若未提供，按 TDesign Form + 背景图实现），支持记住登录、忘记密码、验证码输入；表单实时校验。
-- **数据与 API**：`POST /dft/sys-login`, `/dft/sys-sms`, `/dft/sys-register`, `/dft/app/user/password/*`。登录成功后调用 `/auth/roles`、`/auth/permissions` 同步权限。
-- **状态/逻辑**：`authSlice` 扩展 `{ token, refreshToken, store, roles, permissions, expiresAt }`，封装 `useAuth` hook 提供 `login`, `logout`, `refreshToken`, `hasPermission`；失败计数超过阈值锁定账号并提示。
-- **任务拆解**：
-  1. 登录/验证码登录表单（Zod Schema），集成密码强度与验证码计时器。
-  2. `authService` 封装登录/刷新/登出 API；Axios 拦截器自动附带 token 并处理 401。
-  3. 会话持久化（localStorage + 加密），失效清理并跳转登录页；登录日志写 `/audit/logs`。
-  4. 登录后加载权限与菜单，写入 `authSlice` 并触发全局 `PermissionGuard` 刷新。
+- **UI/交互要点**：`/auth`（`/_anon/auth`) 路由复刻 `764:37999`，使用 Tailwind  + Screen 组件构建表单/背景；支持“记住账号”“忘记密码”提示，表单使用 Zod 做即时校验。
+- **数据与 API**：`POST /dft/login`（帐号密码登录，`LoginBody`）、`POST /dft/smsLogin`、`/dft/sys-sms`, `/dft/sys-register`, `/dft/app/user/password/*`。登录成功后调用 `/auth/roles`、`/auth/permissions` 同步权限。
+- **状态/逻辑**：`src/hooks/useStore.tsx` 通过 Zustand + persist 保存 `{ accessToken, hxUserName, hxPassword, hxUuid }`，并暴露 `setSession/resetSession`。记住账号写入 `localStorage` (`herb:last-account`)；Root Layout 仅呈现“控制台 + 退出登录”。403/401 由 `useRequest` Notification 冷静提示。
+- **任务拆解现状**：
+  1. 账号密码登录已就绪，`src/services/auth.ts` 使用 Zod 校验请求与响应，`src/routes/_anon/auth/route.tsx` 负责 Tailwind UI；剩余短信登录、验证码计时器及安全日志待实现。
+  2. Axios 拦截器含 token 注入（`useRequest` 中的 Authorization header）；刷新 token/锁定策略仍需在后续安全优化中补齐。
+  3. 登录成功写入会话并重定向 `/dashboard`（或 search.redirect）；`/`、`/_hreb` beforeLoad 负责保护业务路由。
+  4. 权限菜单加载逻辑尚未实现，需要在权限模块落地后补齐。
 - **验收/测试**：
-  - 正常登录、验证码登录、登出流程；
-  - token 失效自动重登；
-  - 无权限访问路径被拦截并提示；
-  - 登录失败计数、锁定与日志记录。
+  - 正常登录、登出、未登录访问业务路由被重定向；
+  - token 失效自动重登（TODO）；
+  - 无权限访问路径被拦截并提示（依赖权限模块）；
+  - 登录失败计数、锁定与日志记录（TODO）。
 
 #### 11.1 预约排班模块
 
