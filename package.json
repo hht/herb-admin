@@ -12,9 +12,14 @@
   "dependencies": {
     "@tanstack/react-router": "^1.136.5",
     "@tanstack/react-router-devtools": "^1.136.5",
+    "ahooks": "^3.9.6",
+    "axios": "^1.13.2",
+    "dayjs": "^1.11.19",
+    "lodash": "^4.17.21",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "tdesign-react": "^1.15.8"
+    "tdesign-react": "^1.15.8",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -38,6 +43,9 @@
   "pnpm": {
     "overrides": {
       "vite": "npm:rolldown-vite@7.2.2"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
