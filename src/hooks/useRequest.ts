@@ -6,9 +6,9 @@ import {
 } from "ahooks/lib/useRequest/src/types"
 import axios from "axios"
 
+import { MessagePlugin } from "tdesign-react"
 import { BASE_URL } from "~/libs/constants"
 import { useHerbStore } from "./useStore"
-import { NotificationPlugin } from "tdesign-react"
 
 type Response<T> =
   | {
@@ -61,7 +61,7 @@ export const request = async <T, U>(
       // console.log("🚀", url)
       // console.log("👜", JSON.stringify(body))
       // console.log("🚫", JSON.stringify(error.message ?? error))
-      throw error.message
+      throw error
     })
 }
 
@@ -74,10 +74,9 @@ export const useRequest = <TData, TParams extends unknown[]>(
     service,
     {
       onError: (error) => {
-        NotificationPlugin.error({
-          title: "对不起，出错了！",
+        console.log("useRequest出错：", error)
+        MessagePlugin.error({
           content: error.message,
-          placement: "bottom-right",
           duration: 3000,
           closeBtn: true,
         })

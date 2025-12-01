@@ -149,7 +149,15 @@
   - 配药扣减库存 E2E 流程（含失败回滚）。
   - 低库存提醒出现在列表与 Dashboard。
 
-#### 11.4 财务结算与账务模块
+#### 11.4 员工管理模块
+
+- **目标**：在后台端维护内部员工（医生/顾问/职员）信息，支持创建、编辑、软删除以及搜索过滤。
+- **UI/交互要点**：参照 Figma 用户管理界面（左侧菜单 + 右侧查询表单 + 表格）；当前实现位于 `/_herb/employees`，顶部是可配置的查询表单，主体为 TDesign Table，操作列包含“信息管理”“删除”。
+- **数据与 API**：`GET /dft/backend/user/list`（分页列表）、`POST /dft/backend/user/create`、`POST /dft/backend/user/edit`（更新/软删除）。查询表单/抽屉表单/表格字段均映射 Swagger `SysUserDTO/SysUserVO`（含 `areaCode、username、password、nickName、role、sex、status、introduction、licenseNo` 等），新增场景校验区号+密码，编辑时可留空密码以保持不变。
+- **状态/逻辑**：`useRequest` + Zustand 请求拦截，列表查询受 `query` 状态驱动；SchemaForm 依据 FieldSchema 配置动态增加必填规则（create 模式加严 `password`），编辑 Drawer 打开时通过 `GET /dft/backend/user/detail/{id}` 回填最新数据；表单提交前统一 `form.validate()` 并再用 `form.getFieldsValue()` 构造 DTO。删除暂通过 `status=0` 软删除，待确认正式接口后替换。
+- **验收/测试**：筛选/分页/新增/编辑/删除全流程通过；Drawer 信息保存正确并刷新列表；后续可扩展导出、批量导入与权限联动。
+
+#### 11.5 财务结算与账务模块
 
 - **目标**：完成收费单、票据、挂账管理及多支付方式结算。
 - **UI/交互要点**：Figma 中 KPI + 表格 + 右侧结算抽屉；支付方式按钮使用 TDesign Segment + 输入框组合。
@@ -165,7 +173,7 @@
   - 权限不足用户无法点击导出；
   - 票据/报表文件完整、字段准确。
 
-#### 11.5 统计看板与监控模块
+#### 11.6 统计看板与监控模块
 
 - **目标**：可视化展示预约转化、接诊量、药材消耗、医生绩效与接口成功率。
 - **UI/交互要点**：Figma KPI 卡 + 折线/柱状图布局，筛选面板位于顶部右侧（时间、门店、医生）。
@@ -180,7 +188,7 @@
   - 模拟接口失败时 UI 告警；
   - 监控指标显示最近 24h 数据。
 
-#### 11.6 权限与审计模块
+#### 11.7 权限与审计模块
 
 - **目标**：管理角色-菜单-接口权限并提供操作日志审计。
 - **UI/交互要点**：Figma 左侧菜单树 + 右侧权限矩阵；日志列表使用 Table + Filter。

@@ -17,6 +17,7 @@
   1. 实现壳层布局（header + sidebar + content）组件，复刻节点样式（灰底、白色卡片、菜单组标题等）。
   2. 将导航项配置化（JSON + 权限码），支持折叠、高亮、分组标签（管理员/更多等）。
   3. Header 集成功能入口（搜索、用户信息、设置），联动 `authSlice`。
+- **当前实现**：`src/routes/_herb/route.tsx` 已完成品牌头部 + 侧栏 + 面包屑布局，菜单结构与截图一致（问诊/管理员/更多分组），并集成退出操作及路由守卫。
 - **验收**：导航与 header 样式一致；权限不同的账号展示不同菜单；路由切换保持滚动与面包屑正确。
 
 ### 2. 预约与排班管理
@@ -47,6 +48,7 @@
   2. 员工管理（角色、门店、状态）+ 批量导入模板；与权限模块联动。
   3. 个人页/资料卡视图复刻 Figma 设计（头像、操作按钮）。
   4. 若需部门管理：暂未在 Figma 中找到对应帧，待设计补充；先实现数据层接口（`/auth/departments` 等）与空状态。
+- **当前实现**：`src/routes/_herb/employees/route.tsx` 参照截图完成“员工管理”页面，SchemaForm/Table 现已与 Swagger `SysUserDTO/SysUserVO` 字段完全对齐（含 `areaCode/username/password/role/sex/status/introduction/licenseNo` 等），编辑 Drawer 打开时会即时调用 `/dft/backend/user/detail/{id}` 同步最新信息；新增时强制区号+密码，编辑留空密码不变；使用 `/dft/backend/user/create|edit`、软删除维持 `/edit + status=0`，服务层封装在 `src/services/employees.ts`。后续可补充导出/部门等功能。
 - **验收**：增删改查流程、导入导出、权限控制；部门功能待设计确认。
 
 ### 5. 药材库存与配药

@@ -12,8 +12,8 @@ import localeData from "dayjs/plugin/localeData"
 import relativeTime from "dayjs/plugin/relativeTime"
 import utc from "dayjs/plugin/utc"
 import i18n from "i18next"
-import { toast } from "sonner"
 import { twMerge } from "tailwind-merge"
+import { MessagePlugin } from "tdesign-react"
 
 export const defaultNS = "app"
 
@@ -66,10 +66,10 @@ export const copyToClipboard = async (
       throw new Error("No text to copy")
     }
     await navigator.clipboard.writeText(`${text}`)
-    toast.success(t("message.copiedSuccess"))
+    MessagePlugin.success(t("message.copiedSuccess"))
   } catch (err) {
     console.log("Failed to write to clipboard: ", err)
-    toast.error(t("message.copiedFailed"))
+    MessagePlugin.error(t("message.copiedFailed"))
   }
 }
 
