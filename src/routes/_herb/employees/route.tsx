@@ -1,30 +1,17 @@
-import { useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
-import {
-  Button,
-  Card,
-  Drawer,
-  Form,
-  MessagePlugin,
-  Popconfirm,
-  Space,
-  Table,
-  Tag,
-} from "tdesign-react"
+import { Button, Popconfirm, Space, Tag } from "tdesign-react"
 
 import {
-  SchemaForm,
-  buildTableColumns,
+  SchemaCrud,
   type FieldSchema,
   type TableFieldSchema,
 } from "~/components"
-import { useRequest } from "~/hooks/useRequest"
 import {
   createEmployee,
   deleteEmployee,
+  getEmployeeDetail,
   listEmployees,
   updateEmployee,
-  getEmployeeDetail,
   type Employee,
   type EmployeeInput,
   type EmployeeQuery,
@@ -36,6 +23,7 @@ const AREA_CODE_OPTIONS = [
 ]
 
 const ROLE_OPTIONS = [
+  { label: "管理员", value: 1 },
   { label: "职员", value: 2 },
   { label: "医生", value: 3 },
   { label: "顾问", value: 4 },
@@ -170,139 +158,85 @@ const tableSchema: TableFieldSchema<Employee>[] = [
 
 const DEFAULT_QUERY: EmployeeQuery = { pageNum: 1, pageSize: 20 }
 
-export const Route = createFileRoute("/_herb/employees")({
-  component: EmployeePage,
+const buildFormValues = (employee?: Employee | null) => ({
+  userId: employee?.userId,
+  areaCode: employee?.areaCode ?? "86",
+  username: employee?.username ?? "",
+  nickName: employee?.nickName ?? "",
+  role: employee?.role ? Number(employee.role) : undefined,
+  sex: employee?.sex ?? undefined,
+  email: employee?.email ?? "",
+  phonenumber: employee?.phonenumber ?? "",
+  post: employee?.post ?? "",
+  licenseNo: employee?.licenseNo ?? "",
+  introduction: employee?.introduction ?? "",
+  status: employee?.status ?? "1",
+  remark: employee?.remark ?? "",
+  password: undefined,
 })
 
-function EmployeePage() {
-  const [query, setQuery] = useState<EmployeeQuery>(DEFAULT_QUERY)
-  const [drawerVisible, setDrawerVisible] = useState(false)
-  const [editing, setEditing] = useState<Employee | null>(null)
-  const [form] = Form.useForm()
-  const [searchForm] = Form.useForm()
-
-  const { data, loading, runAsync } = useRequest(() => listEmployees(query), {
-    refreshDeps: [JSON.stringify(query)],
-  })
-
-  const { runAsync: fetchEmployeeDetail, loading: detailLoading } = useRequest(
-    async (userId: number) => await getEmployeeDetail(userId),
-    { manual: true }
-  )
-
-  const fillForm = (employee: Employee) => {
-    form.setFieldsValue({
-      userId: employee.userId,
-      areaCode: employee.areaCode ?? "86",
-      username: employee.username ?? "",
-      nickName: employee.nickName ?? "",
-      role: employee.role ? Number(employee.role) : undefined,
-      sex: employee.sex ?? undefined,
-      email: employee.email ?? "",
-      phonenumber: employee.phonenumber ?? "",
-      post: employee.post ?? "",
-      licenseNo: employee.licenseNo ?? "",
-      introduction: employee.introduction ?? "",
-      status: employee.status ?? "1",
-      remark: employee.remark ?? "",
-      password: undefined,
-    })
-  }
-
-  const onSearch = () => {
-    const values = searchForm.getFieldsValue(true) as EmployeeQuery
-    setQuery((prev) => ({
-      ...prev,
-      pageNum: 1,
-      ...values,
-      role: values.role ? String(values.role) : undefined,
-    }))
-  }
-
-  const onReset = () => {
-    searchForm.reset()
-    setQuery(DEFAULT_QUERY)
-  }
-
-  const openDrawer = (record?: Employee) => {
-    setEditing(record ?? null)
-    setDrawerVisible(true)
-    if (record) {
-      fillForm(record)
-      if (record.userId) {
-        fetchEmployeeDetail(record.userId)
-          .then((detail) => {
-            setEditing(detail)
-            fillForm(detail)
-          })
-          .catch(() => undefined)
-      }
-    } else {
-      form.reset()
-      form.setFieldsValue({ areaCode: "86", role: 2, status: "1" })
-    }
-  }
-
-  const { run: handleSubmit } = useRequest(
-    async () => {
-      const validationResult = await form.validate()
-      if (validationResult !== true) {
-        return
-      }
-      const values = form.getFieldsValue(true) as EmployeeInput
-      const payload: EmployeeInput = {
-        userId: editing?.userId ?? undefined,
-        areaCode: values.areaCode ?? "86",
-        username: values.username,
-        password: values.password,
-        nickName: values.nickName,
-        email: values.email,
-        introduction: values.introduction,
-        licenseNo: values.licenseNo,
-        post: values.post,
-        role: values.role ? Number(values.role) : undefined,
-        sex: values.sex,
-        status: values.status ?? "1",
-        phonenumber: values.phonenumber,
-        remark: values.remark,
-      }
-      if (editing) {
-        if (!values.password) {
-          delete (payload as unknown as EmployeeInput).password
+export const Route = createFileRoute("/_herb/employees")({
+  component: () => (
+    <SchemaCrud<Employee, EmployeeQuery, EmployeeInput>
+      searchSchema={searchSchema}
+      tableSchema={tableSchema}
+      formSchema={formSchema}
+      defaultQuery={DEFAULT_QUERY}
+      rowKey="userId"
+      list={listEmployees}
+      create={async (payload) => {
+        await createEmployee(payload as EmployeeInput & { password: string })
+      }}
+      update={updateEmployee}
+      remove={async (employee) => {
+        if (!employee.userId) return
+        await deleteEmployee(employee.userId)
+      }}
+      detail={async (employee) => {
+        if (!employee.userId) return employee
+        return await getEmployeeDetail(employee.userId)
+      }}
+      formatSearchValues={(values) => ({
+        nickName: values.nickName as string,
+        username: values.username as string,
+        role: values.role ? String(values.role) : undefined,
+      })}
+      formatFormValues={(record) => buildFormValues(record)}
+      mapSubmitValues={(values, editing) => {
+        const payload: EmployeeInput = {
+          userId: editing?.userId ?? undefined,
+          areaCode: (values.areaCode as string) ?? "86",
+          username: values.username as string,
+          password: values.password as string | undefined,
+          nickName: values.nickName as string | undefined,
+          email: values.email as string | undefined,
+          introduction: values.introduction as string | undefined,
+          licenseNo: values.licenseNo as string | undefined,
+          post: values.post as string | undefined,
+          role: values.role ? Number(values.role) : undefined,
+          sex: values.sex as string | undefined,
+          status: (values.status as string) ?? "1",
+          phonenumber: values.phonenumber as string | undefined,
+          remark: values.remark as string | undefined,
         }
-        await updateEmployee(payload)
-        MessagePlugin.success("员工信息已更新")
-      } else {
-        await createEmployee({ ...payload, password: values.password! })
-        MessagePlugin.success("员工已创建")
+        if (editing) {
+          if (!values.password) {
+            delete payload.password
+          }
+          return payload
+        }
+        return { ...payload, password: (values.password as string) ?? "123456" }
+      }}
+      getCreateInitialValues={() => ({ areaCode: "86", role: 2, status: "1" })}
+      getFormSchema={(editing, schema) =>
+        editing
+          ? schema
+          : schema.map((field) =>
+              field.name === "password" ? { ...field, required: true } : field
+            )
       }
-      setDrawerVisible(false)
-      runAsync()
-    },
-    {
-      manual: true,
-    }
-  )
-
-  const handleDelete = async (employee: Employee) => {
-    if (!employee.userId) return
-    try {
-      await deleteEmployee(employee.userId)
-      MessagePlugin.success("已删除")
-      runAsync()
-    } catch (error) {
-      MessagePlugin.error((error as Error)?.message ?? "删除失败")
-    }
-  }
-
-  const columns = buildTableColumns<Employee>([
-    ...tableSchema,
-    {
-      colKey: "actions",
-      title: "操作",
-      width: 160,
-      fixed: "right",
-      render: (row) => (
+      drawerTitle={{ create: "新增员工", edit: "信息管理" }}
+      renderActions={(row, { openDrawer, remove }) => (
         <Space size="small">
           <Button
             theme="primary"
@@ -311,98 +245,18 @@ function EmployeePage() {
           >
             信息管理
           </Button>
-          <Popconfirm
-            content="确定删除该员工吗？"
-            onConfirm={() => handleDelete(row)}
-          >
-            <Button theme="danger" variant="text">
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ])
-
-  const drawerSchema = editing
-    ? formSchema
-    : formSchema.map((field) =>
-        field.name === "password" ? { ...field, required: true } : field
-      )
-
-  return (
-    <div className="space-y-4 min-w-0">
-      <Card bordered={false} className="rounded-xl min-w-0">
-        <SchemaForm
-          form={searchForm}
-          schema={searchSchema}
-          layout="inline"
-          colon={false}
-          className="gap-4"
-          actions={
-            <Space size="small">
-              <Button theme="primary" onClick={onSearch}>
-                查询
-              </Button>
-              <Button onClick={onReset}>重置</Button>
-              <Button
-                theme="primary"
-                variant="outline"
-                onClick={() => openDrawer()}
-              >
-                新增员工
-              </Button>
-            </Space>
-          }
-          actionsAlign="end"
-        />
-      </Card>
-
-      <Card bordered={false} className="rounded-xl w-full min-w-0">
-        <div className="overflow-x-auto min-w-0 max-w-full">
-          <Table
-            columns={columns}
-            tableLayout="fixed"
-            className="w-full min-w-full"
-            data={data?.record ?? []}
-            rowKey="userId"
-            loading={loading}
-            pagination={{
-              current: query.pageNum,
-              pageSize: query.pageSize,
-              total: data?.total ?? 0,
-              onChange: (pageInfo) =>
-                setQuery((prev) => ({
-                  ...prev,
-                  pageNum: pageInfo.current,
-                  pageSize: pageInfo.pageSize,
-                })),
-            }}
-          />
-        </div>
-      </Card>
-
-      <Drawer
-        header={editing ? "信息管理" : "新增员工"}
-        visible={drawerVisible}
-        placement="right"
-        size="40%"
-        onClose={() => setDrawerVisible(false)}
-        footer={
-          <Space>
-            <Button onClick={() => setDrawerVisible(false)}>取消</Button>
-            <Button
-              theme="primary"
-              onClick={handleSubmit}
-              disabled={detailLoading}
+          {remove ? (
+            <Popconfirm
+              content="确定删除该员工吗？"
+              onConfirm={() => remove(row)}
             >
-              保存
-            </Button>
-          </Space>
-        }
-      >
-        <SchemaForm form={form} schema={drawerSchema} layout="vertical" />
-      </Drawer>
-    </div>
-  )
-}
+              <Button theme="danger" variant="text">
+                删除
+              </Button>
+            </Popconfirm>
+          ) : null}
+        </Space>
+      )}
+    />
+  ),
+})
