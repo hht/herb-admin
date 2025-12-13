@@ -11,6 +11,9 @@ import { useEffect } from "react"
 
 import { cn } from "~/libs/utils"
 import { useHerbStore } from "~/hooks/useStore"
+import { UIKitProvider } from "easemob-chat-uikit"
+import { EASEMOB_APP_KEY } from "~/libs/constants"
+import { CallKitProvider } from "~/widgets/callkit"
 
 const MENU_GROUPS = [
   {
@@ -55,80 +58,99 @@ const AccountDetector = () => {
 const HerbLayout = () => {
   const navigate = useNavigate()
   const routerState = useRouterState()
-  const accessToken = useHerbStore((state) => state.accessToken)
+  const { accessToken, hxUserName, hxPassword } = useHerbStore((state) => state)
   const resetSession = useHerbStore((state) => state.resetSession)
   const activePath = routerState.location.pathname
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900 w-screen">
-      <aside className="hidden w-64 flex-shrink-0 border-r border-slate-100 bg-white lg:flex lg:flex-col">
-        <div className="flex items-center gap-3 px-6 py-6 text-[#0052d9]">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#0052d9] font-semibold">
-            T
-          </div>
-          <div className="text-xl font-semibold">Change Name</div>
-        </div>
-        <div className="flex-1 space-y-6 px-4 pb-8">
-          {MENU_GROUPS.map((group) => (
-            <div key={group.label}>
-              <p className="px-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
-                {group.label}
-              </p>
-              <nav className="mt-2 grid gap-1">
-                {group.items.map((item) => {
-                  const isActive = item.to && activePath === item.to
-                  return (
-                    <button
-                      key={item.label}
-                      type="button"
-                      disabled={item.disabled}
-                      onClick={() => item.to && navigate({ to: item.to })}
-                      className={cn(
-                        "flex w-full items-center rounded-lg px-3 py-2 text-left text-sm",
-                        item.disabled && "cursor-not-allowed text-slate-400",
-                        isActive
-                          ? "bg-[#eef4ff] font-semibold text-[#0052d9]"
-                          : "text-slate-600 hover:bg-slate-50"
-                      )}
-                    >
-                      {item.label}
-                    </button>
-                  )
-                })}
-              </nav>
+    <UIKitProvider
+      key={hxUserName}
+      initConfig={{
+        appKey: EASEMOB_APP_KEY,
+        userId: hxUserName,
+        password: hxPassword,
+        useUserInfo: true,
+      }}
+      theme={{
+        primaryColor: "#003c1d",
+        mode: "light",
+        avatarShape: "square",
+        bubbleShape: "square",
+        componentsShape: "square",
+      }}
+      local={{ lng: "zh", fallbackLng: "en" }}
+    >
+      <div className="flex min-h-screen bg-slate-50 text-slate-900 w-screen">
+        <aside className="hidden w-64 flex-shrink-0 border-r border-slate-100 bg-white lg:flex lg:flex-col">
+          <div className="flex items-center gap-3 px-6 py-6 text-[#0052d9]">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#0052d9] font-semibold">
+              T
             </div>
-          ))}
-        </div>
-      </aside>
-      <div className="flex min-h-screen flex-1 flex-col min-w-0">
-        <header className="flex items-center justify-between border-b border-slate-100 bg-white px-6 py-4 w-full">
-          <div className="flex items-center gap-4 text-sm text-slate-500">
-            <Link className="text-slate-600" to="/dashboard">
-              控制台
-            </Link>
-            <span>/</span>
-            <span className="text-slate-400">
-              {BREADCRUMB_LABELS[activePath] ?? "概览"}
-            </span>
+            <div className="text-xl font-semibold">Change Name</div>
           </div>
-          {accessToken ? (
-            <button
-              type="button"
-              className="text-sm text-slate-500 hover:text-slate-900"
-              onClick={resetSession}
-            >
-              退出登录
-            </button>
-          ) : null}
-        </header>
-        <main className="flex flex-1 w-full flex-col min-w-0">
-          <section className="flex-1 overflow-y-auto p-6 min-w-0">
-            <Outlet />
-          </section>
-        </main>
+          <div className="flex-1 space-y-6 px-4 pb-8">
+            {MENU_GROUPS.map((group) => (
+              <div key={group.label}>
+                <p className="px-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                  {group.label}
+                </p>
+                <nav className="mt-2 grid gap-1">
+                  {group.items.map((item) => {
+                    const isActive = item.to && activePath === item.to
+                    return (
+                      <button
+                        key={item.label}
+                        type="button"
+                        disabled={item.disabled}
+                        onClick={() => item.to && navigate({ to: item.to })}
+                        className={cn(
+                          "flex w-full items-center rounded-lg px-3 py-2 text-left text-sm",
+                          item.disabled && "cursor-not-allowed text-slate-400",
+                          isActive
+                            ? "bg-[#eef4ff] font-semibold text-[#0052d9]"
+                            : "text-slate-600 hover:bg-slate-50"
+                        )}
+                      >
+                        {item.label}
+                      </button>
+                    )
+                  })}
+                </nav>
+              </div>
+            ))}
+          </div>
+        </aside>
+        <div className="flex min-h-screen flex-1 flex-col min-w-0">
+          <header className="flex items-center justify-between border-b border-slate-100 bg-white px-6 py-4 w-full">
+            <div className="flex items-center gap-4 text-sm text-slate-500">
+              <Link className="text-slate-600" to="/dashboard">
+                控制台
+              </Link>
+              <span>/</span>
+              <span className="text-slate-400">
+                {BREADCRUMB_LABELS[activePath] ?? "概览"}
+              </span>
+            </div>
+            {accessToken ? (
+              <button
+                type="button"
+                className="text-sm text-slate-500 hover:text-slate-900"
+                onClick={resetSession}
+              >
+                退出登录
+              </button>
+            ) : null}
+          </header>
+          <main className="flex flex-1 w-full flex-col min-w-0">
+            <section className="flex-1 overflow-y-auto p-6 min-w-0">
+              <Outlet />
+            </section>
+          </main>
+        </div>
+        <AccountDetector />
       </div>
-      <AccountDetector />
-    </div>
+      <CallKitProvider />
+    </UIKitProvider>
   )
 }
 
