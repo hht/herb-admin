@@ -14,9 +14,12 @@ import { useHerbStore } from "~/hooks/useStore"
 
 const MENU_GROUPS = [
   {
+    label: "聊天室",
+    items: [{ label: "聊天室", to: "/dashboard" }],
+  },
+  {
     label: "问诊",
     items: [
-      { label: "聊天室", to: "/dashboard" },
       { label: "订单管理", disabled: true },
       { label: "预约管理", disabled: true },
       { label: "用户管理", disabled: true },
@@ -32,6 +35,11 @@ const MENU_GROUPS = [
     items: [{ label: "个人页", disabled: true }],
   },
 ]
+
+const BREADCRUMB_LABELS: Record<string, string> = {
+  "/dashboard": "聊天室",
+  "/employees": "员工管理",
+}
 
 const AccountDetector = () => {
   const router = useRouter()
@@ -100,7 +108,7 @@ const HerbLayout = () => {
             </Link>
             <span>/</span>
             <span className="text-slate-400">
-              {activePath === "/employees" ? "员工管理" : "仪表盘"}
+              {BREADCRUMB_LABELS[activePath] ?? "概览"}
             </span>
           </div>
           {accessToken ? (

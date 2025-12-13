@@ -16,6 +16,7 @@
     "axios": "^1.13.2",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.19",
+    "easemob-chat-uikit": "^2.3.1",
     "i18next": "^25.6.3",
     "lodash": "^4.17.21",
     "lodash-es": "^4.17.21",
