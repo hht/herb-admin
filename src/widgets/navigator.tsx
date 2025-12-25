@@ -33,7 +33,7 @@ const MENU_GROUPS: {
       { label: "订单管理", disabled: true },
       { label: "套餐设置", to: "/packages" },
       { label: "预约管理", disabled: true },
-      { label: "用户管理", disabled: true },
+      { label: "用户管理", to: "/users" },
       { label: "药材管理", disabled: true },
     ],
   },
@@ -52,9 +52,7 @@ export const Navigator = () => {
   const navigate = useNavigate()
   const routerState = useRouterState()
   const activePath = routerState.location.pathname
-  const [expandedGroups, setExpandedGroups] = useState<string[]>([
-    "健康顾问",
-  ])
+  const [expandedGroups, setExpandedGroups] = useState<string[]>(["健康顾问"])
 
   const toggleGroup = (label: string) => {
     setExpandedGroups((prev) =>

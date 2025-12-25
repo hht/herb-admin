@@ -37,9 +37,12 @@
   --td-border-color-component: #dcdcdc;
 
   /* 阴影 */
-  --td-shadow-1: 0 1px 3px hsla(203, 8%, 10%, 0.15), 1px 0 2px hsla(203, 8%, 10%, 0.1);
-  --td-shadow-2: 0 4px 4px hsla(203, 8%, 30%, 0.15), 2px 0 8px hsla(203, 8%, 10%, 0.1);
-  --td-shadow-3: 0 24px 36px hsla(203, 8%, 30%, 0.15), 8px 0 24px hsla(203, 8%, 10%, 0.1);
+  --td-shadow-1: 0 1px 3px hsla(203, 8%, 10%, 0.15),
+    1px 0 2px hsla(203, 8%, 10%, 0.1);
+  --td-shadow-2: 0 4px 4px hsla(203, 8%, 30%, 0.15),
+    2px 0 8px hsla(203, 8%, 10%, 0.1);
+  --td-shadow-3: 0 24px 36px hsla(203, 8%, 30%, 0.15),
+    8px 0 24px hsla(203, 8%, 10%, 0.1);
 
   /* 圆角 */
   --td-radius-small: 4px;
@@ -48,7 +51,8 @@
   --td-radius-extra-large: 16px;
 
   /* 字体 */
-  --td-font-family: "Roboto", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --td-font-family: "Roboto", "Noto Sans SC", "PingFang SC", "Microsoft YaHei",
+    sans-serif;
 }
 
 /* 设置全局字体 */
@@ -72,5 +76,22 @@ body {
 }
 
 .package-drawer .t-drawer__footer {
+  padding: 12px 48px;
+}
+
+.user-drawer .t-drawer__header {
+  min-height: 56px;
+  padding: 0 16px;
+}
+
+.user-drawer .t-drawer__close-btn {
+  right: 16px;
+}
+
+.user-drawer .t-drawer__body {
+  padding: 40px 48px 32px;
+}
+
+.user-drawer .t-drawer__footer {
   padding: 12px 48px;
 }

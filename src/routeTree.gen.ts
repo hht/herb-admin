@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as HerbRouteRouteImport } from './routes/_herb/route'
 import { Route as AnonRouteRouteImport } from './routes/_anon/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as HerbUsersRouteRouteImport } from './routes/_herb/users/route'
 import { Route as HerbPackagesRouteRouteImport } from './routes/_herb/packages/route'
 import { Route as HerbEmployeesRouteRouteImport } from './routes/_herb/employees/route'
 import { Route as HerbDashboardRouteRouteImport } from './routes/_herb/dashboard/route'
@@ -29,6 +30,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const HerbUsersRouteRoute = HerbUsersRouteRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => HerbRouteRoute,
 } as any)
 const HerbPackagesRouteRoute = HerbPackagesRouteRouteImport.update({
   id: '/packages',
@@ -57,6 +63,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof HerbDashboardRouteRoute
   '/employees': typeof HerbEmployeesRouteRoute
   '/packages': typeof HerbPackagesRouteRoute
+  '/users': typeof HerbUsersRouteRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -64,6 +71,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof HerbDashboardRouteRoute
   '/employees': typeof HerbEmployeesRouteRoute
   '/packages': typeof HerbPackagesRouteRoute
+  '/users': typeof HerbUsersRouteRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -74,12 +82,19 @@ export interface FileRoutesById {
   '/_herb/dashboard': typeof HerbDashboardRouteRoute
   '/_herb/employees': typeof HerbEmployeesRouteRoute
   '/_herb/packages': typeof HerbPackagesRouteRoute
+  '/_herb/users': typeof HerbUsersRouteRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/dashboard' | '/employees' | '/packages'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/employees'
+    | '/packages'
+    | '/users'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/dashboard' | '/employees' | '/packages'
+  to: '/' | '/auth' | '/dashboard' | '/employees' | '/packages' | '/users'
   id:
     | '__root__'
     | '/'
@@ -89,6 +104,7 @@ export interface FileRouteTypes {
     | '/_herb/dashboard'
     | '/_herb/employees'
     | '/_herb/packages'
+    | '/_herb/users'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -119,6 +135,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_herb/users': {
+      id: '/_herb/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof HerbUsersRouteRouteImport
+      parentRoute: typeof HerbRouteRoute
     }
     '/_herb/packages': {
       id: '/_herb/packages'
@@ -167,12 +190,14 @@ interface HerbRouteRouteChildren {
   HerbDashboardRouteRoute: typeof HerbDashboardRouteRoute
   HerbEmployeesRouteRoute: typeof HerbEmployeesRouteRoute
   HerbPackagesRouteRoute: typeof HerbPackagesRouteRoute
+  HerbUsersRouteRoute: typeof HerbUsersRouteRoute
 }
 
 const HerbRouteRouteChildren: HerbRouteRouteChildren = {
   HerbDashboardRouteRoute: HerbDashboardRouteRoute,
   HerbEmployeesRouteRoute: HerbEmployeesRouteRoute,
   HerbPackagesRouteRoute: HerbPackagesRouteRoute,
+  HerbUsersRouteRoute: HerbUsersRouteRoute,
 }
 
 const HerbRouteRouteWithChildren = HerbRouteRoute._addFileChildren(
