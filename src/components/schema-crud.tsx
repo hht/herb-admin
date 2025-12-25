@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import {
   Button,
   Card,
@@ -114,34 +114,40 @@ export const SchemaCrud = <
     setQuery(defaultQuery)
   }
 
-  const fillForm = (record: T) => {
-    const formatted = formatFormValues ? formatFormValues(record) : record
-    form.setFieldsValue(formatted)
-  }
+  const fillForm = useCallback(
+    (record: T) => {
+      const formatted = formatFormValues ? formatFormValues(record) : record
+      form.setFieldsValue(formatted)
+    },
+    [form, formatFormValues]
+  )
 
-  const openDrawer = async (record?: T) => {
-    setDrawerVisible(true)
-    if (record) {
-      setEditing(record)
-      fillForm(record)
-      if (detail && record) {
-        try {
-          setDetailLoading(true)
-          const detailData = await detail(record)
-          setEditing(detailData)
-          fillForm(detailData)
-        } finally {
-          setDetailLoading(false)
+  const openDrawer = useCallback(
+    async (record?: T) => {
+      setDrawerVisible(true)
+      if (record) {
+        setEditing(record)
+        fillForm(record)
+        if (detail) {
+          try {
+            setDetailLoading(true)
+            const detailData = await detail(record)
+            setEditing(detailData)
+            fillForm(detailData)
+          } finally {
+            setDetailLoading(false)
+          }
         }
+      } else {
+        setEditing(null)
+        form.reset()
+        form.setFieldsValue(
+          getCreateInitialValues ? getCreateInitialValues() : {}
+        )
       }
-    } else {
-      setEditing(null)
-      form.reset()
-      form.setFieldsValue(
-        getCreateInitialValues ? getCreateInitialValues() : {}
-      )
-    }
-  }
+    },
+    [detail, form, getCreateInitialValues, fillForm]
+  )
 
   const handleSubmit = async () => {
     const valid = await form.validate()
@@ -159,12 +165,15 @@ export const SchemaCrud = <
     runAsync()
   }
 
-  const handleDelete = async (record: T) => {
-    if (!remove) return
-    await remove(record)
-    MessagePlugin.success("已删除")
-    runAsync()
-  }
+  const handleDelete = useCallback(
+    async (record: T) => {
+      if (!remove) return
+      await remove(record)
+      MessagePlugin.success("已删除")
+      runAsync()
+    },
+    [remove, runAsync]
+  )
 
   const columns = useMemo(() => {
     if (hideActionColumn) {
@@ -215,7 +224,15 @@ export const SchemaCrud = <
     }
 
     return buildTableColumns<T>([...tableSchema, actionColumn])
-  }, [tableSchema, remove, hideActionColumn, actionColumnProps, renderActions])
+  }, [
+    tableSchema,
+    remove,
+    hideActionColumn,
+    actionColumnProps,
+    renderActions,
+    handleDelete,
+    openDrawer,
+  ])
 
   const drawerSchema = useMemo(
     () => (getFormSchema ? getFormSchema(editing, formSchema) : formSchema),

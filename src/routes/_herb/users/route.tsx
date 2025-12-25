@@ -28,6 +28,7 @@ import {
   type AppUserInput,
   type AppUserQuery,
 } from "~/services/app-users"
+import { QtnRecordsDrawer } from "./qtn-records"
 
 const DEFAULT_QUERY: AppUserQuery = { pageNum: 1, pageSize: 20, role: "5" }
 
@@ -119,6 +120,9 @@ const UserManagement = () => {
   const [editing, setEditing] = useState<AppUser | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [blacklisted, setBlacklisted] = useState(false)
+  const [qtnVisible, setQtnVisible] = useState(false)
+  const [qtnUserId, setQtnUserId] = useState<number | undefined>(undefined)
+  const [qtnUserName, setQtnUserName] = useState<string>("")
   const [form] = Form.useForm()
 
   const { data, loading, runAsync } = useRequest(() => listAppUsers(query), {
@@ -211,6 +215,16 @@ const UserManagement = () => {
     runAsync()
   }
 
+  const openQtnDrawer = (user: AppUser) => {
+    if (!user.userId) {
+      MessagePlugin.error("缺少用户编号")
+      return
+    }
+    setQtnUserId(user.userId)
+    setQtnUserName(user.nickName ?? user.username ?? "用户")
+    setQtnVisible(true)
+  }
+
   const handleChangePage = (pageInfo: {
     current: number
     pageSize: number
@@ -239,8 +253,9 @@ const UserManagement = () => {
             信息管理
           </Button>
           <Button
+            theme="primary"
             variant="text"
-            onClick={() => MessagePlugin.info("问诊记录功能建设中")}
+            onClick={() => openQtnDrawer(row)}
           >
             问诊记录
           </Button>
@@ -396,6 +411,13 @@ const UserManagement = () => {
           </div>
         </Form>
       </Drawer>
+
+      <QtnRecordsDrawer
+        userId={qtnUserId}
+        userName={qtnUserName}
+        visible={qtnVisible}
+        onClose={() => setQtnVisible(false)}
+      />
     </div>
   )
 }

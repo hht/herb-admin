@@ -95,3 +95,33 @@ body {
 .user-drawer .t-drawer__footer {
   padding: 12px 48px;
 }
+
+.employee-drawer .t-drawer__header {
+  min-height: 56px;
+  padding: 0 16px;
+}
+
+.employee-drawer .t-drawer__close-btn {
+  right: 16px;
+}
+
+.employee-drawer .t-drawer__body {
+  padding: 40px 48px 32px;
+}
+
+.employee-drawer .t-drawer__footer {
+  padding: 12px 48px;
+}
+
+.qtn-drawer .t-drawer__header {
+  min-height: 56px;
+  padding: 0 16px;
+}
+
+.qtn-drawer .t-drawer__close-btn {
+  right: 16px;
+}
+
+.qtn-drawer .t-drawer__body {
+  padding: 0;
+}
