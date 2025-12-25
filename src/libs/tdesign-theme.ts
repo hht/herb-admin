@@ -5,7 +5,7 @@
 
 export const tdesignTheme = {
   // 主色
-  brandColor: "hsl(203, 100%, 50%)", // #009EFF
+  brandColor: "#267347",
 
   // 警告色
   warningColor: "hsl(30, 100%, 50%)",
@@ -14,28 +14,28 @@ export const tdesignTheme = {
   errorColor: "hsl(0, 84%, 60%)",
 
   // 成功色
-  successColor: "hsl(155, 100%, 50%)", // #00FF95
+  successColor: "#267347",
 
   // 文字颜色
   textColor: {
-    primary: "hsl(203, 8%, 10%)", // #171A1C
-    secondary: "hsl(203, 8%, 50%)", // #75828A
-    placeholder: "hsl(203, 8%, 60%)", // #919BA1
-    disabled: "hsl(203, 8%, 70%)", // #ACB4B9
+    primary: "#1D2129",
+    secondary: "rgba(0, 0, 0, 0.6)",
+    placeholder: "rgba(0, 0, 0, 0.4)",
+    disabled: "#777777",
   },
 
   // 背景颜色
   bgColor: {
-    page: "hsl(203, 8%, 98%)", // #F9FAFA
+    page: "#F3F3F3",
     container: "#FFFFFF",
-    component: "hsl(203, 8%, 95%)", // #F1F2F3
-    componentDisabled: "hsl(203, 8%, 90%)", // #E3E6E8
+    component: "#FFFFFF",
+    componentDisabled: "#F3F3F3",
   },
 
   // 边框颜色
   borderColor: {
-    default: "#e7e7e7",
-    component: "hsl(203, 8%, 90%)", // #E3E6E8
+    default: "#E7E7E7",
+    component: "#DCDCDC",
   },
 
   // 阴影

@@ -31,6 +31,7 @@ const MENU_GROUPS: {
     label: "管理",
     items: [
       { label: "订单管理", disabled: true },
+      { label: "套餐设置", to: "/packages" },
       { label: "预约管理", disabled: true },
       { label: "用户管理", disabled: true },
       { label: "药材管理", disabled: true },

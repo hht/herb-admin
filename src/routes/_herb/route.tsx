@@ -5,7 +5,11 @@ import {
   useRouter,
 } from "@tanstack/react-router"
 import { useEffect } from "react"
-import { SettingIcon, UserCircleIcon } from "tdesign-icons-react"
+import {
+  ChevronDownIcon,
+  SettingIcon,
+  UserCircleIcon,
+} from "tdesign-icons-react"
 
 import { useHerbStore } from "~/hooks/useStore"
 import { Navigator } from "~/widgets/navigator"
@@ -34,14 +38,19 @@ const HerbLayout = () => {
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* 顶部导航栏 */}
           <header className="flex h-14 items-center justify-between border-b border-border bg-white px-6">
-            <div className="flex items-center gap-4">
-              <div className="flex cursor-pointer items-center gap-2 px-2 py-1">
-                <UserCircleIcon className="text-neutral-950/90" size={20} />
-                <span className="text-sm text-neutral-950/90">用户名</span>
-              </div>
+            <div />
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                className="rounded p-1.5 hover:bg-neutral-950/5"
+                className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-neutral-950/5"
+              >
+                <UserCircleIcon className="text-neutral-950/90" size={20} />
+                <span className="text-sm text-neutral-950/90">用户名</span>
+                <ChevronDownIcon className="text-neutral-500" size={16} />
+              </button>
+              <button
+                type="button"
+                className="flex size-8 items-center justify-center rounded hover:bg-neutral-950/5"
                 onClick={resetSession}
               >
                 <SettingIcon className="text-neutral-950/90" size={20} />
