@@ -7,7 +7,8 @@
 #### UI 设计稿
 
 ```
-https://www.figma.com/design/zlHeCNicdVIIoHXjrsf5Fo/%E4%B8%AD%E9%86%ABAPP-%E5%B1%95%E7%A4%BA?node-id=624-2910&p=f&t=O0Sr6voK4ssFsO7o-0
+https://www.figma.com/design/5xUszO9ejQuDQY048mrjc4/%E4%B8%AD%E5%8C%BB%E7%AE%A1%E7%90%86%E7%AB%AF?t=JdtO8pr1cLufDXB4-0
+
 ```
 
 #### 后台接口文档

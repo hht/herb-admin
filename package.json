@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "update:api-docs": "curl -fsSL https://open.yhcheng.pub/dft/v3/api-docs -o docs/dft-api-docs.json"
   },
   "dependencies": {
     "@tanstack/react-router": "^1.136.5",

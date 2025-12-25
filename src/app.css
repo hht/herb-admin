@@ -3,20 +3,46 @@
 @tailwind utilities;
 
 :root {
-  --td-brand-color-1: #e9f8e9;
-  --td-brand-color-2: #d3efd7;
-  --td-brand-color-3: #a8d6b3;
-  --td-brand-color-4: #7cbb8f;
-  --td-brand-color-5: #5d9f73;
-  --td-brand-color-6: #398557;
-  --td-brand-color-7: #267347;
-  --td-brand-color-8: #00532b;
-  --td-brand-color-9: #003c1d;
-  --td-brand-color-10: #002610;
-  --td-brand-color-light: var(--td-brand-color-1);
-  --td-brand-color-focus: var(--td-brand-color-2);
-  --td-brand-color-disabled: var(--td-brand-color-3);
-  --td-brand-color-hover: var(--td-brand-color-6);
-  --td-brand-color: var(--td-brand-color-7);
-  --td-brand-color-active: var(--td-brand-color-8);
+  /* 主色系 */
+  --td-brand-color: hsl(203, 100%, 50%); /* #009EFF */
+  --td-warning-color: hsl(30, 100%, 50%);
+  --td-error-color: hsl(0, 84%, 60%);
+  --td-success-color: hsl(155, 100%, 50%); /* #00FF95 */
+
+  /* 文字颜色 */
+  --td-text-color-primary: hsl(203, 8%, 10%); /* #171A1C */
+  --td-text-color-secondary: hsl(203, 8%, 50%); /* #75828A */
+  --td-text-color-placeholder: hsl(203, 8%, 60%); /* #919BA1 */
+  --td-text-color-disabled: hsl(203, 8%, 70%); /* #ACB4B9 */
+
+  /* 背景颜色 */
+  --td-bg-color-page: hsl(203, 8%, 98%); /* #F9FAFA */
+  --td-bg-color-container: #ffffff;
+  --td-bg-color-component: hsl(203, 8%, 95%); /* #F1F2F3 */
+  --td-bg-color-component-disabled: hsl(203, 8%, 90%); /* #E3E6E8 */
+
+  /* 边框颜色 */
+  --td-border-color: #e7e7e7;
+  --td-border-color-component: hsl(203, 8%, 90%); /* #E3E6E8 */
+
+  /* 阴影 */
+  --td-shadow-1: 0 1px 3px hsla(203, 8%, 10%, 0.15), 1px 0 2px hsla(203, 8%, 10%, 0.1);
+  --td-shadow-2: 0 4px 4px hsla(203, 8%, 30%, 0.15), 2px 0 8px hsla(203, 8%, 10%, 0.1);
+  --td-shadow-3: 0 24px 36px hsla(203, 8%, 30%, 0.15), 8px 0 24px hsla(203, 8%, 10%, 0.1);
+
+  /* 圆角 */
+  --td-radius-small: 4px;
+  --td-radius-medium: 8px;
+  --td-radius-large: 12px;
+  --td-radius-extra-large: 16px;
+
+  /* 字体 */
+  --td-font-family: "Roboto", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* 设置全局字体 */
+body {
+  font-family: var(--td-font-family);
+  color: var(--td-text-color-primary);
+  background-color: var(--td-bg-color-page);
 }
