@@ -1,11 +1,27 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { Button, Popconfirm, Space, Tag } from "tdesign-react"
-
+import dayjs from "dayjs"
+import { useMemo, useState } from "react"
+import { MoreIcon, SearchIcon } from "tdesign-icons-react"
 import {
-  SchemaCrud,
-  type FieldSchema,
-  type TableFieldSchema,
-} from "~/components"
+  Button,
+  Dialog,
+  DialogPlugin,
+  Drawer,
+  Dropdown,
+  Form,
+  Input,
+  Loading,
+  MessagePlugin,
+  Pagination,
+  Radio,
+  Space,
+  Table,
+  Tag,
+  Tabs,
+} from "tdesign-react"
+
+import { buildTableColumns, type TableFieldSchema } from "~/components"
+import { useRequest } from "~/hooks/useRequest"
 import {
   createEmployee,
   deleteEmployee,
@@ -17,21 +33,31 @@ import {
   type EmployeeQuery,
 } from "~/services/employees"
 
-const AREA_CODE_OPTIONS = [
-  { label: "+86", value: "86" },
-  { label: "+852", value: "852" },
+const DEFAULT_QUERY: EmployeeQuery = { pageNum: 1, pageSize: 20 }
+
+const TAB_OPTIONS = [
+  { label: "全部员工", value: "all", role: undefined },
+  { label: "健康顾问", value: "advisor", role: 4 },
+  { label: "专业医生", value: "doctor", role: 3 },
+  { label: "管理员", value: "admin", role: 1 },
 ]
+
+const TAB_LIST = TAB_OPTIONS.map((item) => ({
+  label: item.label,
+  value: item.value,
+}))
 
 const ROLE_OPTIONS = [
+  { label: "健康顾问", value: 4 },
+  { label: "专业医生", value: 3 },
   { label: "管理员", value: 1 },
   { label: "职员", value: 2 },
-  { label: "医生", value: 3 },
-  { label: "顾问", value: 4 },
 ]
 
-const STATUS_OPTIONS = [
-  { label: "启用", value: "1" },
-  { label: "禁用", value: "0" },
+const PERMISSION_OPTIONS = [
+  { label: "健康顾问", value: 4 },
+  { label: "专业医生", value: 3 },
+  { label: "管理员", value: 1 },
 ]
 
 const SEX_OPTIONS = [
@@ -39,224 +65,602 @@ const SEX_OPTIONS = [
   { label: "女", value: "2" },
 ]
 
-const searchSchema: FieldSchema[] = [
-  {
-    name: "nickName",
-    label: "员工名称",
-    placeholder: "请输入员工名称",
-    props: { style: { width: 200 } },
-  },
-  {
-    name: "username",
-    label: "手机号",
-    placeholder: "请输入手机号",
-    props: { style: { width: 200 } },
-  },
-  {
-    name: "role",
-    label: "类型",
-    component: "select",
-    options: ROLE_OPTIONS,
-    props: { style: { width: 200 } },
-  },
-]
+function formatTime(value?: string | null) {
+  if (!value) return "-"
+  const date = dayjs(value)
+  return date.isValid() ? date.format("YYYY/MM/DD HH:mm") : "-"
+}
 
-const formSchema: FieldSchema[] = [
-  {
-    name: "areaCode",
-    label: "区号",
-    component: "select",
-    required: true,
-    options: AREA_CODE_OPTIONS,
-  },
-  { name: "username", label: "账号/手机号", required: true },
-  {
-    name: "password",
-    label: "登录密码",
-    component: "password",
-    props: { placeholder: "新增必填，编辑时留空表示不修改" },
-  },
-  { name: "nickName", label: "员工姓名" },
-  {
-    name: "role",
-    label: "职位类型",
-    component: "select",
-    options: ROLE_OPTIONS,
-  },
-  {
-    name: "sex",
-    label: "性别",
-    component: "select",
-    options: SEX_OPTIONS,
-  },
-  { name: "email", label: "邮箱" },
-  { name: "phonenumber", label: "联系电话" },
-  { name: "post", label: "岗位" },
-  { name: "licenseNo", label: "证书编号" },
-  {
-    name: "introduction",
-    label: "简介",
-    component: "textarea",
-    props: { rows: 3 },
-  },
-  {
-    name: "status",
-    label: "状态",
-    component: "select",
-    required: true,
-    options: STATUS_OPTIONS,
-  },
-  { name: "remark", label: "备注", component: "textarea", props: { rows: 3 } },
-]
+function toNumber(value: unknown) {
+  if (value === "" || value === null || value === undefined) return undefined
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? undefined : parsed
+}
 
-const tableSchema: TableFieldSchema<Employee>[] = [
-  { colKey: "nickName", title: "员工姓名", width: 150, ellipsis: true },
-  { colKey: "username", title: "账号", width: 160 },
-  { colKey: "areaCode", title: "区号", width: 100 },
-  { colKey: "phonenumber", title: "联系电话", width: 180 },
+function getRoleLabel(value?: Employee["role"] | null) {
+  const parsed = toNumber(value)
+  const option = ROLE_OPTIONS.find((item) => item.value === parsed)
+  return option?.label ?? "-"
+}
+
+function getSexLabel(value?: string | null) {
+  const option = SEX_OPTIONS.find((item) => item.value === value)
+  return option?.label ?? "-"
+}
+
+function getStatusLabel(status?: string | null) {
+  if (status === "1") return { label: "在线", theme: "success" as const }
+  if (status === "0") return { label: "离线", theme: "default" as const }
+  return { label: "-", theme: "default" as const }
+}
+
+function buildFormValues(employee?: Employee | null) {
+  return {
+    userId: employee?.userId ? String(employee.userId) : "",
+    nickName: employee?.nickName ?? "",
+    sex: employee?.sex ?? "",
+    post: employee?.post ?? "",
+    phonenumber: employee?.phonenumber ?? employee?.username ?? "",
+    email: employee?.email ?? "",
+    role: toNumber(employee?.role),
+    password: "",
+  }
+}
+
+function getTabRole(value: string) {
+  return TAB_OPTIONS.find((item) => item.value === value)?.role
+}
+
+const TABLE_SCHEMA: TableFieldSchema<Employee>[] = [
+  { colKey: "userId", title: "员工编号", width: 120 },
+  { colKey: "nickName", title: "员工姓名", width: 160, ellipsis: true },
   {
     colKey: "role",
-    title: "职位类型",
+    title: "员工权限",
     width: 140,
-    render: (row) => {
-      const option = ROLE_OPTIONS.find(
-        (item) => String(item.value) === String(row.role ?? "")
-      )
-      return option?.label ?? "-"
-    },
+    render: (row) => getRoleLabel(row.role),
   },
-  {
-    colKey: "sex",
-    title: "性别",
-    width: 100,
-    render: (row) => {
-      const option = SEX_OPTIONS.find((item) => item.value === row.sex)
-      return option?.label ?? "-"
-    },
-  },
-  { colKey: "email", title: "邮箱", width: 220, ellipsis: true },
-  { colKey: "post", title: "岗位", width: 140, ellipsis: true },
-  { colKey: "licenseNo", title: "证书编号", width: 200, ellipsis: true },
-  { colKey: "introduction", title: "简介", width: 260, ellipsis: true },
   {
     colKey: "status",
-    title: "状态",
+    title: "员工状态",
     width: 120,
-    render: (row) =>
-      row.status === "1" ? (
-        <Tag theme="success" variant="light">
-          启用
-        </Tag>
+    render: (row) => {
+      const status = getStatusLabel(row.status)
+      return status.label === "-" ? (
+        "-"
       ) : (
-        <Tag theme="default" variant="light">
-          禁用
+        <Tag theme={status.theme} variant="light">
+          {status.label}
         </Tag>
-      ),
+      )
+    },
   },
-  { colKey: "createTime", title: "创建日期", width: 180 },
+  {
+    colKey: "updateTime",
+    title: "最后登录时间",
+    width: 200,
+    render: (row) => formatTime(row.updateTime ?? row.createTime),
+  },
 ]
 
-const DEFAULT_QUERY: EmployeeQuery = { pageNum: 1, pageSize: 20 }
+const EmployeeManagement = () => {
+  const [query, setQuery] = useState<EmployeeQuery>(DEFAULT_QUERY)
+  const [activeTab, setActiveTab] = useState("all")
+  const [keyword, setKeyword] = useState("")
+  const [drawerVisible, setDrawerVisible] = useState(false)
+  const [detailVisible, setDetailVisible] = useState(false)
+  const [editing, setEditing] = useState<Employee | null>(null)
+  const [detail, setDetail] = useState<Employee | null>(null)
+  const [formLoading, setFormLoading] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [permissionVisible, setPermissionVisible] = useState(false)
+  const [permissionLoading, setPermissionLoading] = useState(false)
+  const [permissionTarget, setPermissionTarget] = useState<Employee | null>(
+    null
+  )
+  const [permissionRole, setPermissionRole] = useState<number | undefined>(
+    undefined
+  )
+  const [form] = Form.useForm()
 
-const buildFormValues = (employee?: Employee | null) => ({
-  userId: employee?.userId,
-  areaCode: employee?.areaCode ?? "86",
-  username: employee?.username ?? "",
-  nickName: employee?.nickName ?? "",
-  role: employee?.role ? Number(employee.role) : undefined,
-  sex: employee?.sex ?? undefined,
-  email: employee?.email ?? "",
-  phonenumber: employee?.phonenumber ?? "",
-  post: employee?.post ?? "",
-  licenseNo: employee?.licenseNo ?? "",
-  introduction: employee?.introduction ?? "",
-  status: employee?.status ?? "1",
-  remark: employee?.remark ?? "",
-  password: undefined,
-})
+  const { data, loading, runAsync } = useRequest(() => listEmployees(query), {
+    refreshDeps: [JSON.stringify(query)],
+  })
 
-export const Route = createFileRoute("/_herb/employees")({
-  component: () => (
-    <SchemaCrud<Employee, EmployeeQuery, EmployeeInput>
-      searchSchema={searchSchema}
-      tableSchema={tableSchema}
-      formSchema={formSchema}
-      defaultQuery={DEFAULT_QUERY}
-      rowKey="userId"
-      list={listEmployees}
-      create={async (payload) => {
-        await createEmployee(payload as EmployeeInput & { password: string })
-      }}
-      update={updateEmployee}
-      remove={async (employee) => {
-        if (!employee.userId) return
+  const records = useMemo(() => data?.record ?? [], [data])
+
+  const handleSearch = () => {
+    setQuery((prev) => ({
+      ...prev,
+      pageNum: 1,
+      nickName: keyword.trim() || undefined,
+    }))
+  }
+
+  const handleTabChange = (value: string | number) => {
+    const nextTab = String(value)
+    const role = getTabRole(nextTab)
+    setActiveTab(nextTab)
+    setQuery((prev) => ({
+      ...prev,
+      pageNum: 1,
+      role: role ? String(role) : undefined,
+    }))
+  }
+
+  const openFormDrawer = async (employee?: Employee) => {
+    setDrawerVisible(true)
+    if (!employee) {
+      setEditing(null)
+      form.reset()
+      form.setFieldsValue({ role: undefined })
+      return
+    }
+    setEditing(employee)
+    form.setFieldsValue(buildFormValues(employee))
+    if (!employee.userId) return
+    try {
+      setFormLoading(true)
+      const detailData = await getEmployeeDetail(employee.userId)
+      setEditing(detailData)
+      form.setFieldsValue(buildFormValues(detailData))
+    } finally {
+      setFormLoading(false)
+    }
+  }
+
+  const closeFormDrawer = () => {
+    setDrawerVisible(false)
+    setEditing(null)
+    form.reset()
+  }
+
+  const openDetailDrawer = async (employee: Employee) => {
+    setDetailVisible(true)
+    setDetail(employee)
+    if (!employee.userId) return
+    try {
+      setDetailLoading(true)
+      const detailData = await getEmployeeDetail(employee.userId)
+      setDetail(detailData)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const closeDetailDrawer = () => {
+    setDetailVisible(false)
+    setDetail(null)
+  }
+
+  const handleContact = (employee: Employee) => {
+    const phone = employee.phonenumber ?? employee.username ?? ""
+    const email = employee.email ?? ""
+    if (!phone && !email) {
+      MessagePlugin.info("暂无联系方式")
+      return
+    }
+    const contact = [phone, email].filter(Boolean).join(" / ")
+    MessagePlugin.info(`联系方式：${contact}`)
+  }
+
+  const openPermissionDialog = async (employee: Employee) => {
+    setPermissionVisible(true)
+    setPermissionTarget(employee)
+    setPermissionRole(toNumber(employee.role))
+    if (!employee.userId || (employee.username && employee.areaCode)) return
+    try {
+      setPermissionLoading(true)
+      const detailData = await getEmployeeDetail(employee.userId)
+      setPermissionTarget(detailData)
+      setPermissionRole(toNumber(detailData.role))
+    } finally {
+      setPermissionLoading(false)
+    }
+  }
+
+  const closePermissionDialog = () => {
+    setPermissionVisible(false)
+    setPermissionTarget(null)
+    setPermissionRole(undefined)
+  }
+
+  const handlePermissionSubmit = async () => {
+    if (!permissionTarget?.userId) {
+      MessagePlugin.error("缺少员工编号")
+      return
+    }
+    if (!permissionRole) {
+      MessagePlugin.warning("请选择员工权限")
+      return
+    }
+    const username = permissionTarget.username ?? permissionTarget.phonenumber
+    if (!username) {
+      MessagePlugin.error("缺少账号信息")
+      return
+    }
+    try {
+      setPermissionLoading(true)
+      await updateEmployee({
+        userId: permissionTarget.userId,
+        areaCode: permissionTarget.areaCode ?? "86",
+        username,
+        phonenumber: permissionTarget.phonenumber ?? username,
+        role: permissionRole,
+        status: permissionTarget.status ?? "1",
+      })
+      MessagePlugin.success("权限已更新")
+      closePermissionDialog()
+      runAsync()
+    } finally {
+      setPermissionLoading(false)
+    }
+  }
+
+  const handleDelete = (employee: Employee) => {
+    if (!employee.userId) {
+      MessagePlugin.error("缺少员工编号")
+      return
+    }
+    const dialog = DialogPlugin.confirm({
+      header: "确认删除",
+      body: `确定删除员工${employee.nickName ?? ""}吗？`,
+      confirmBtn: "删除",
+      cancelBtn: "取消",
+      onConfirm: async () => {
         await deleteEmployee(employee.userId)
-      }}
-      detail={async (employee) => {
-        if (!employee.userId) return employee
-        return await getEmployeeDetail(employee.userId)
-      }}
-      formatSearchValues={(values) => ({
-        nickName: values.nickName as string,
-        username: values.username as string,
-        role: values.role ? String(values.role) : undefined,
-      })}
-      formatFormValues={(record) => buildFormValues(record)}
-      mapSubmitValues={(values, editing) => {
-        const payload: EmployeeInput = {
-          userId: editing?.userId ?? undefined,
-          areaCode: (values.areaCode as string) ?? "86",
-          username: values.username as string,
-          password: values.password as string | undefined,
-          nickName: values.nickName as string | undefined,
-          email: values.email as string | undefined,
-          introduction: values.introduction as string | undefined,
-          licenseNo: values.licenseNo as string | undefined,
-          post: values.post as string | undefined,
-          role: values.role ? Number(values.role) : undefined,
-          sex: values.sex as string | undefined,
-          status: (values.status as string) ?? "1",
-          phonenumber: values.phonenumber as string | undefined,
-          remark: values.remark as string | undefined,
+        MessagePlugin.success("已删除")
+        dialog.hide()
+        runAsync()
+      },
+      onClose: () => dialog.hide(),
+    })
+  }
+
+  const handleSubmit = async () => {
+    const valid = await form.validate()
+    if (valid !== true) return
+    const values = form.getFieldsValue(true) as Record<string, unknown>
+    const phone = String(values.phonenumber ?? "")
+    const payload: EmployeeInput = {
+      userId: editing?.userId ?? undefined,
+      areaCode: editing?.areaCode ?? "86",
+      username: phone,
+      password: values.password ? String(values.password) : undefined,
+      nickName: values.nickName ? String(values.nickName) : undefined,
+      email: values.email ? String(values.email) : undefined,
+      post: values.post ? String(values.post) : undefined,
+      role: toNumber(values.role),
+      sex: values.sex ? String(values.sex) : undefined,
+      status: editing?.status ?? "1",
+      phonenumber: phone,
+    }
+
+    try {
+      setFormLoading(true)
+      if (editing) {
+        if (!values.password) {
+          delete payload.password
         }
-        if (editing) {
-          if (!values.password) {
-            delete payload.password
-          }
-          return payload
-        }
-        return { ...payload, password: (values.password as string) ?? "123456" }
-      }}
-      getCreateInitialValues={() => ({ areaCode: "86", role: 2, status: "1" })}
-      getFormSchema={(editing, schema) =>
-        editing
-          ? schema
-          : schema.map((field) =>
-              field.name === "password" ? { ...field, required: true } : field
-            )
+        await updateEmployee(payload)
+        MessagePlugin.success("更新成功")
+      } else {
+        const createPayload = {
+          ...payload,
+          password: String(values.password ?? ""),
+        } as EmployeeInput & { password: string }
+        await createEmployee(createPayload)
+        MessagePlugin.success("创建成功")
       }
-      drawerTitle={{ create: "新增员工", edit: "信息管理" }}
-      renderActions={(row, { openDrawer, remove }) => (
+      closeFormDrawer()
+      runAsync()
+    } finally {
+      setFormLoading(false)
+    }
+  }
+
+  const handleChangePage = (pageInfo: {
+    current: number
+    pageSize: number
+  }) => {
+    setQuery((prev) => ({
+      ...prev,
+      pageNum: pageInfo.current,
+      pageSize: pageInfo.pageSize,
+    }))
+  }
+
+  const columns = buildTableColumns<Employee>([
+    {
+      colKey: "userId",
+      title: "员工编号",
+      width: 120,
+      render: (row) => row.userId ?? "-",
+    },
+    {
+      colKey: "nickName",
+      title: "员工姓名",
+      width: 160,
+      ellipsis: true,
+      render: (row) => (
+        <Button
+          theme="primary"
+          variant="text"
+          className="px-0"
+          onClick={() => openDetailDrawer(row)}
+        >
+          {row.nickName ?? row.username ?? "-"}
+        </Button>
+      ),
+    },
+    ...TABLE_SCHEMA,
+    {
+      colKey: "actions",
+      title: "操作",
+      width: 260,
+      fixed: "right",
+      render: (row) => (
         <Space size="small">
           <Button
             theme="primary"
             variant="text"
-            onClick={() => openDrawer(row)}
+            onClick={() => handleContact(row)}
           >
-            信息管理
+            联系
           </Button>
-          {remove ? (
-            <Popconfirm
-              content="确定删除该员工吗？"
-              onConfirm={() => remove(row)}
-            >
-              <Button theme="danger" variant="text">
-                删除
-              </Button>
-            </Popconfirm>
-          ) : null}
+          <Button
+            theme="primary"
+            variant="text"
+            onClick={() => openPermissionDialog(row)}
+          >
+            编辑权限
+          </Button>
+          <Dropdown
+            trigger="click"
+            placement="bottom-right"
+            options={[
+              { content: "管理", value: "manage" },
+              { content: "删除", value: "delete", theme: "error" },
+            ]}
+            onClick={(option) => {
+              if (option.value === "manage") {
+                openFormDrawer(row)
+                return
+              }
+              if (option.value === "delete") {
+                handleDelete(row)
+              }
+            }}
+          >
+            <Button variant="text" className="px-2">
+              <MoreIcon size={16} />
+            </Button>
+          </Dropdown>
         </Space>
-      )}
-    />
-  ),
+      ),
+    },
+  ])
+
+  const detailItems = [
+    { label: "员工姓名", value: detail?.nickName ?? "-" },
+    { label: "员工编号", value: detail?.userId ? String(detail.userId) : "-" },
+    { label: "性别", value: getSexLabel(detail?.sex) },
+    {
+      label: "手机",
+      value: detail?.phonenumber ?? detail?.username ?? "-",
+    },
+    { label: "办公邮箱", value: detail?.email ?? "-" },
+    { label: "职位", value: detail?.post ?? "-" },
+    { label: "员工权限", value: getRoleLabel(detail?.role) },
+  ]
+
+  return (
+    <div className="flex h-full w-full flex-col overflow-hidden">
+      <div className="flex-1 overflow-auto bg-neutral-50 p-8">
+        <div className="rounded-xl border border-border bg-white p-6">
+          <div className="flex flex-wrap items-center gap-4">
+            <Tabs
+              theme="normal"
+              value={activeTab}
+              list={TAB_LIST}
+              onChange={handleTabChange}
+            />
+          </div>
+          <div className="flex flex-wrap py-4 items-center justify-between gap-4">
+            <Button theme="primary" onClick={() => openFormDrawer()}>
+              新增员工
+            </Button>
+            <div className="w-[240px]">
+              <Input
+                value={keyword}
+                onChange={(value) => setKeyword(value)}
+                onEnter={handleSearch}
+                placeholder="请输入员工姓名"
+                suffixIcon={<SearchIcon size={16} />}
+              />
+            </div>
+          </div>
+
+          <div className="my-6 border-t border-border" />
+
+          <div className="overflow-x-auto">
+            <Table
+              columns={columns}
+              tableLayout="fixed"
+              className="w-full min-w-full"
+              data={records}
+              rowKey="userId"
+              loading={loading}
+              empty="暂无员工数据"
+              cellEmptyContent="-"
+            />
+          </div>
+
+          <div className="mt-6 flex justify-end">
+            <Pagination
+              current={query.pageNum ?? 1}
+              pageSize={query.pageSize ?? 20}
+              total={data?.total ?? 0}
+              onChange={handleChangePage}
+            />
+          </div>
+        </div>
+      </div>
+
+      <Drawer
+        className="employee-drawer"
+        header={editing ? "员工管理" : "新增员工"}
+        visible={drawerVisible}
+        placement="right"
+        size="760px"
+        onClose={closeFormDrawer}
+        footer={
+          <div className="flex items-center gap-2">
+            <Button
+              theme="primary"
+              onClick={handleSubmit}
+              disabled={formLoading}
+            >
+              保存
+            </Button>
+            <Button variant="outline" onClick={closeFormDrawer}>
+              取消
+            </Button>
+          </div>
+        }
+      >
+        <Form form={form} layout="vertical" colon={false}>
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div className="text-sm font-medium text-neutral-900">
+                员工基础信息
+              </div>
+              <div className="grid grid-cols-2 gap-6">
+                <Form.FormItem
+                  name="nickName"
+                  label="员工姓名"
+                  rules={[{ required: true, message: "请输入员工姓名" }]}
+                >
+                  <Input placeholder="请输入员工姓名" />
+                </Form.FormItem>
+                <Form.FormItem name="userId" label="员工编号">
+                  <Input disabled />
+                </Form.FormItem>
+                <Form.FormItem name="sex" label="性别">
+                  <Radio.Group options={SEX_OPTIONS} />
+                </Form.FormItem>
+                <Form.FormItem name="post" label="职位">
+                  <Input placeholder="请输入职位" />
+                </Form.FormItem>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="text-sm font-medium text-neutral-900">
+                账户信息
+              </div>
+              <div className="grid grid-cols-2 gap-6">
+                <Form.FormItem
+                  name="phonenumber"
+                  label="手机号"
+                  rules={[{ required: true, message: "请输入手机号" }]}
+                >
+                  <Input placeholder="请输入手机号" />
+                </Form.FormItem>
+                <Form.FormItem name="email" label="办公邮箱">
+                  <Input placeholder="请输入办公邮箱" />
+                </Form.FormItem>
+                <Form.FormItem
+                  name="password"
+                  label="初始密码"
+                  className="col-span-2"
+                  rules={
+                    editing
+                      ? []
+                      : [{ required: true, message: "请输入初始密码" }]
+                  }
+                >
+                  <Input type="password" placeholder="请输入初始密码" />
+                </Form.FormItem>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="text-sm font-medium text-neutral-900">
+                员工权限
+              </div>
+              <Form.FormItem
+                name="role"
+                rules={[{ required: true, message: "请选择员工权限" }]}
+              >
+                <Radio.Group options={PERMISSION_OPTIONS} />
+              </Form.FormItem>
+            </div>
+          </div>
+        </Form>
+      </Drawer>
+
+      <Drawer
+        className="employee-drawer"
+        header="查看详情"
+        visible={detailVisible}
+        placement="right"
+        size="640px"
+        onClose={closeDetailDrawer}
+        footer={
+          <Button theme="primary" onClick={closeDetailDrawer}>
+            返回
+          </Button>
+        }
+      >
+        <Loading loading={detailLoading}>
+          <div className="grid grid-cols-2 gap-x-12 gap-y-6">
+            {detailItems.map((item) => (
+              <div key={item.label} className="space-y-1">
+                <div className="text-xs text-neutral-500">{item.label}</div>
+                <div className="text-sm text-neutral-900">{item.value}</div>
+              </div>
+            ))}
+          </div>
+        </Loading>
+      </Drawer>
+
+      <Dialog
+        header="编辑权限"
+        visible={permissionVisible}
+        closeOnOverlayClick={false}
+        onClose={closePermissionDialog}
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={closePermissionDialog}>
+              取消
+            </Button>
+            <Button
+              theme="primary"
+              onClick={handlePermissionSubmit}
+              disabled={permissionLoading}
+            >
+              保存
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="text-sm text-neutral-600">
+            当前员工：
+            {permissionTarget?.nickName ?? permissionTarget?.username ?? "-"}
+          </div>
+          <Radio.Group
+            options={PERMISSION_OPTIONS}
+            value={permissionRole}
+            onChange={(value) => setPermissionRole(Number(value))}
+          />
+        </div>
+      </Dialog>
+    </div>
+  )
+}
+
+export const Route = createFileRoute("/_herb/employees")({
+  component: EmployeeManagement,
 })
