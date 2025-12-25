@@ -7,15 +7,15 @@ export default {
         // Primary 主题色系 (Hue: 203, Saturation: 100%)
         primary: {
           DEFAULT: "#267347",
-          50: "#ECF9F1",
+          50: "#F7FCFA",
           100: "#ECF9F1",
-          200: "#ECF9F1",
-          300: "#267347",
-          400: "#267347",
-          500: "#267347",
-          600: "#1A4C30",
-          700: "#1A4C30",
-          800: "#1A4C30",
+          200: "#D9F2E4",
+          300: "#B3E5C9",
+          400: "#8CD9AD",
+          500: "#66CC92",
+          600: "#40BF77",
+          700: "#33995F",
+          800: "#267347",
           900: "#1A4C30",
         },
         // Brand 品牌色
@@ -25,30 +25,30 @@ export default {
         },
         // Success 成功色
         success: {
-          DEFAULT: "hsl(155, 100%, 50%)", // #00FF95
+          DEFAULT: "#33995F",
         },
         // Neutral 中性色系 (Hue: 203, Saturation: 8%)
         neutral: {
-          50: "#F3F3F3",
-          100: "#FFFFFF",
-          200: "#E7E7E7",
-          300: "#DCDCDC",
-          400: "hsl(203, 8%, 70%)",
-          500: "hsl(203, 8%, 60%)",
-          600: "#777777",
-          700: "hsl(203, 8%, 40%)",
-          800: "hsl(203, 8%, 30%)",
-          900: "hsl(203, 8%, 20%)",
-          950: "#1D2129",
+          50: "#FAFAFA",
+          100: "#F2F3F2",
+          200: "#E4E7E5",
+          300: "#CACECC",
+          400: "#AFB6B2",
+          500: "#959D98",
+          600: "#7A857F",
+          700: "#49504C",
+          800: "#313533",
+          900: "#181B19",
+          950: "#000000",
         },
         // Neutral Special 特殊中性色 (用于昵称等强调)
         "neutral-special": {
-          DEFAULT: "hsl(220, 36%, 50%)", // #5270AD
-          light: "hsl(220, 36%, 98%)", // #F8F9FC
+          DEFAULT: "#49504C",
+          light: "#FAFAFA",
         },
         // Border 边框色
         border: {
-          DEFAULT: "#E7E7E7",
+          DEFAULT: "#E4E7E5",
         },
       },
       fontFamily: {
