@@ -13,7 +13,12 @@ import { cn } from "~/libs/utils"
 const MENU_GROUPS: {
   label: string
   expandable?: boolean
-  items: { label: string; to?: string; disabled?: boolean }[]
+  items: {
+    label: string
+    to?: string
+    disabled?: boolean
+    children?: { label: string; to?: string; disabled?: boolean }[]
+  }[]
 }[] = [
   {
     label: "健康顾问",
@@ -30,8 +35,10 @@ const MENU_GROUPS: {
   {
     label: "管理",
     items: [
-      { label: "订单管理", disabled: true },
-      { label: "套餐设置", to: "/packages" },
+      {
+        label: "订单管理",
+        children: [{ label: "套餐管理", to: "/packages" }],
+      },
       { label: "预约管理", disabled: true },
       { label: "用户管理", to: "/users" },
       { label: "药材管理", disabled: true },
@@ -53,12 +60,19 @@ export const Navigator = () => {
   const routerState = useRouterState()
   const activePath = routerState.location.pathname
   const [expandedGroups, setExpandedGroups] = useState<string[]>(["健康顾问"])
+  const [expandedItems, setExpandedItems] = useState<string[]>([])
 
   const toggleGroup = (label: string) => {
     setExpandedGroups((prev) =>
       prev.includes(label)
         ? prev.filter((item) => item !== label)
         : [...prev, label]
+    )
+  }
+
+  const toggleItem = (key: string) => {
+    setExpandedItems((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
     )
   }
 
@@ -134,21 +148,64 @@ export const Navigator = () => {
               ) : (
                 group.items.map((item) => {
                   const isActive = item.to && activePath === item.to
+                  const itemKey = `${group.label}-${item.label}`
+                  const hasChildren = (item.children?.length ?? 0) > 0
+                  const isItemExpanded = expandedItems.includes(itemKey)
                   return (
-                    <button
-                      key={item.label}
-                      type="button"
-                      disabled={item.disabled}
-                      onClick={() => item.to && navigate({ to: item.to })}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded px-4 py-1.5 text-sm text-neutral-950/60 hover:bg-neutral-950/5",
-                        isActive && "bg-brand-light text-brand",
-                        item.disabled && "opacity-40 cursor-not-allowed"
-                      )}
-                    >
-                      <ViewListIcon size={20} />
-                      <span>{item.label}</span>
-                    </button>
+                    <div key={item.label} className="space-y-1">
+                      <button
+                        type="button"
+                        disabled={item.disabled}
+                        onClick={() => {
+                          if (hasChildren) {
+                            toggleItem(itemKey)
+                            return
+                          }
+                          if (item.to) {
+                            navigate({ to: item.to })
+                          }
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded px-4 py-1.5 text-sm text-neutral-950/60 hover:bg-neutral-950/5",
+                          isActive && "bg-brand-light text-brand",
+                          item.disabled && "opacity-40 cursor-not-allowed"
+                        )}
+                      >
+                        <ViewListIcon size={20} />
+                        <span className="flex-1 text-left">{item.label}</span>
+                        {hasChildren ? (
+                          isItemExpanded ? (
+                            <ChevronUpIcon size={16} />
+                          ) : (
+                            <ChevronDownIcon size={16} />
+                          )
+                        ) : null}
+                      </button>
+                      {hasChildren && isItemExpanded
+                        ? item.children?.map((child) => {
+                            const isChildActive =
+                              child.to && activePath === child.to
+                            return (
+                              <button
+                                key={child.label}
+                                type="button"
+                                disabled={child.disabled}
+                                onClick={() =>
+                                  child.to && navigate({ to: child.to })
+                                }
+                                className={cn(
+                                  "block w-full rounded px-4 py-1.5 pl-11 text-left text-sm text-neutral-950/60 hover:bg-neutral-950/5",
+                                  isChildActive && "bg-brand-light text-brand",
+                                  child.disabled &&
+                                    "opacity-40 cursor-not-allowed"
+                                )}
+                              >
+                                {child.label}
+                              </button>
+                            )
+                          })
+                        : null}
+                    </div>
                   )
                 })
               )}
