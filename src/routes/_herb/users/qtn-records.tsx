@@ -7,7 +7,8 @@ import {
   Loading,
   MessagePlugin,
   Pagination,
-  Popconfirm,
+  DialogPlugin,
+  Radio,
   Select,
   Table,
   Tag,
@@ -30,7 +31,8 @@ import {
   useQtnRecordsStore,
 } from "~/stores/qtn-records-store"
 
-const MAX_COMPARE_COUNT = 2
+const MAX_COMPARE_COUNT = 3
+const MAX_QTN_PAGE_SIZE = 100
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "-"
@@ -544,8 +546,8 @@ export const QtnRecordsDrawer = ({
       userId
         ? listAppUserQtn({
             userId,
-            pageNum: page.pageNum,
-            pageSize: page.pageSize,
+            pageNum: 1,
+            pageSize: MAX_QTN_PAGE_SIZE,
           })
         : Promise.resolve(emptyPage),
     {
@@ -619,8 +621,32 @@ export const QtnRecordsDrawer = ({
     setState({ compareData: details, view: "compare" })
   }
 
+  const handleDelete = (record: QtnRecord) => {
+    const label = record.batchNo ?? "该记录"
+    const dialog = DialogPlugin.confirm({
+      header: "确认删除",
+      body: `确定删除问诊记录${label}吗？`,
+      confirmBtn: "删除",
+      cancelBtn: "取消",
+      onConfirm: () => {
+        MessagePlugin.info("暂无删除接口")
+        dialog.hide()
+      },
+      onClose: () => dialog.hide(),
+    })
+  }
+
   const baseColumns = [
-    { colKey: "batchNo", title: "问诊编号", width: 150 },
+    {
+      colKey: "batchNo",
+      title: "问诊编号",
+      width: 150,
+      cell: ({ row }: { row: QtnRecord }) => (
+        <span className="block max-w-[120px] truncate">
+          {row.batchNo ?? "-"}
+        </span>
+      ),
+    },
     { colKey: "name", title: "患者姓名", width: 150 },
     {
       colKey: "createTime",
@@ -671,14 +697,13 @@ export const QtnRecordsDrawer = ({
                 >
                   详情
                 </Button>
-                <Popconfirm
-                  content="暂未提供删除接口"
-                  onConfirm={() => MessagePlugin.info("暂无删除接口")}
+                <Button
+                  variant="text"
+                  theme="danger"
+                  onClick={() => handleDelete(row)}
                 >
-                  <Button variant="text" theme="danger">
-                    删除
-                  </Button>
-                </Popconfirm>
+                  删除
+                </Button>
               </div>
             ),
           },
@@ -687,32 +712,25 @@ export const QtnRecordsDrawer = ({
   const listView = (
     <div className="px-6 py-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => {
+        <Radio.Group
+          theme="button"
+          variant="outline"
+          value={mode}
+          onChange={(value) => {
+            const nextMode = String(value) as "normal" | "compare"
+            if (nextMode === mode) return
+            if (nextMode === "normal") {
               setState({ mode: "normal", selected: [] })
-            }}
-            className={`h-8 rounded border px-4 text-sm ${
-              mode === "normal"
-                ? "border-brand bg-brand-light text-brand"
-                : "border-border text-neutral-600"
-            }`}
-          >
-            普通模式
-          </button>
-          <button
-            type="button"
-            onClick={() => setState({ mode: "compare" })}
-            className={`h-8 rounded border px-4 text-sm ${
-              mode === "compare"
-                ? "border-brand bg-brand-light text-brand"
-                : "border-border text-neutral-600"
-            }`}
-          >
-            对比模式
-          </button>
-        </div>
+              return
+            }
+            setState({ mode: "compare" })
+          }}
+          options={[
+            { label: "普通模式", value: "normal" },
+            { label: "对比模式", value: "compare" },
+          ]}
+          className="qtn-segment"
+        />
         <Select
           value={symptomFilter}
           onChange={(value) => setState({ symptomFilter: String(value) })}
@@ -723,43 +741,38 @@ export const QtnRecordsDrawer = ({
 
       <div className="mt-6">
         <Table
-          columns={tableColumns}
+          columns={
+            mode === "compare"
+              ? [
+                  ...baseColumns,
+                  {
+                    colKey: "select",
+                    title: "对比",
+                    width: 120,
+                    cell: ({ row }: { row: QtnRecord }) => {
+                      const lockedName = selected[0]?.name
+                      const isLocked =
+                        Boolean(lockedName) && row.name !== lockedName
+                      const isChecked = selected.some(
+                        (item) => item.batchNo && item.batchNo === row.batchNo
+                      )
+                      return (
+                        <Checkbox
+                          checked={isChecked}
+                          disabled={isLocked}
+                          onChange={(checked) => toggleSelect(row, checked)}
+                        />
+                      )
+                    },
+                  },
+                ]
+              : tableColumns
+          }
           tableLayout="fixed"
           data={filteredRecords}
           rowKey="batchNo"
           loading={loading}
           empty="暂无问诊记录"
-        />
-      </div>
-
-      <div className="mt-6 flex items-center justify-between">
-        {mode === "compare" ? (
-          <div className="flex items-center gap-4">
-            <Button theme="primary" onClick={openCompare}>
-              开始对比
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setState({ selected: [] })
-              }}
-            >
-              取消选择
-            </Button>
-            <span className="text-sm text-neutral-500">
-              已选择{selected.length}条记录（最多选择{MAX_COMPARE_COUNT}条记录）
-            </span>
-          </div>
-        ) : (
-          <div />
-        )}
-        <Pagination
-          current={page.pageNum ?? 1}
-          pageSize={page.pageSize ?? 10}
-          total={data?.total ?? 0}
-          onChange={(pageInfo) =>
-            setPage({ pageNum: pageInfo.current, pageSize: pageInfo.pageSize })
-          }
         />
       </div>
     </div>
@@ -774,7 +787,30 @@ export const QtnRecordsDrawer = ({
       size="760px"
       onClose={handleClose}
       closeBtn={view === "list" ? true : false}
-      footer={null}
+      footer={
+        view === "list" && mode === "compare" ? (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Button theme="primary" onClick={openCompare}>
+                开始对比
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setState({ selected: [] })}
+              >
+                取消选择
+              </Button>
+            </div>
+            <span
+              className={`text-sm ${
+                selected.length >= 2 ? "text-brand" : "text-neutral-500"
+              }`}
+            >
+              已选择{selected.length}条记录（最多选择{MAX_COMPARE_COUNT}条记录）
+            </span>
+          </div>
+        ) : null
+      }
     >
       <Loading loading={detailLoading}>
         {view === "list" ? (

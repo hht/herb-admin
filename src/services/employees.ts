@@ -56,6 +56,13 @@ export interface EmployeeInput {
 }
 
 export type EmployeeCreateInput = EmployeeInput & { password: string }
+export interface EmployeeRoleInput {
+  userId: number
+  role: number
+  username: string
+  areaCode: string
+  password?: string
+}
 
 export const listEmployees = async (
   params: EmployeeQuery
@@ -77,6 +84,13 @@ export const createEmployee = async (payload: EmployeeCreateInput) =>
 
 export const updateEmployee = async (payload: EmployeeInput) =>
   await request<Employee, EmployeeInput>("/backend/user/edit", "POST", payload)
+
+export const updateEmployeeRole = async (payload: EmployeeRoleInput) =>
+  await request<Employee, EmployeeRoleInput>(
+    "/backend/user/updateRole",
+    "POST",
+    payload
+  )
 
 export const deleteEmployee = async (userId: number) =>
   await request("/backend/user/edit", "POST", {

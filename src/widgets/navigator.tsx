@@ -5,10 +5,19 @@ import {
   ViewListIcon,
   ChevronUpIcon,
   ChevronDownIcon,
-  UserIcon,
 } from "tdesign-icons-react"
 
 import { cn } from "~/libs/utils"
+import {
+  MenuChatIcon,
+  MenuCollapseIcon,
+  MenuConsultIcon,
+  MenuEmployeeIcon,
+  MenuOrderIcon,
+  MenuProfileIcon,
+  MenuUserIcon,
+} from "~/components/figma-icons"
+import type { SvgIconComponent } from "~/components/figma-icons"
 
 const MENU_GROUPS: {
   label: string
@@ -55,6 +64,26 @@ const MENU_GROUPS: {
   },
 ]
 
+const MENU_ICON_MAP: Record<string, SvgIconComponent> = {
+  聊天室: MenuChatIcon,
+  订单管理: MenuOrderIcon,
+  预约管理: MenuConsultIcon,
+  问诊管理: MenuConsultIcon,
+  问诊: MenuConsultIcon,
+  用户管理: MenuUserIcon,
+  员工管理: MenuEmployeeIcon,
+  员工信息: MenuEmployeeIcon,
+  个人页: MenuProfileIcon,
+  药材管理: MenuConsultIcon,
+}
+
+const renderMenuIcon = (label?: string, className?: string) => {
+  if (!label) return <ViewListIcon size={20} className={className} />
+  const Icon = MENU_ICON_MAP[label]
+  if (!Icon) return <ViewListIcon size={20} className={className} />
+  return <Icon className={className} />
+}
+
 export const Navigator = () => {
   const navigate = useNavigate()
   const routerState = useRouterState()
@@ -92,10 +121,16 @@ export const Navigator = () => {
 
       {/* 菜单区域 */}
       <div className="flex-1 overflow-y-auto p-2">
-        {MENU_GROUPS.map((group, groupIndex) => {
+        {MENU_GROUPS.map((group) => {
           const isExpanded = expandedGroups.includes(group.label)
           const firstItem = group.items[0]
           const restItems = group.items.slice(1)
+          const isFirstActive =
+            !!firstItem?.to && activePath === firstItem.to
+          const firstIconClassName = cn(
+            "size-5",
+            isFirstActive ? "text-brand" : "text-neutral-950/60"
+          )
 
           return (
             <div className="mb-1" key={group.label}>
@@ -110,14 +145,11 @@ export const Navigator = () => {
                     disabled={firstItem.disabled}
                     className={cn(
                       "flex w-full items-center gap-2 rounded px-4 py-1.5 text-sm text-neutral-950/90 hover:bg-neutral-950/5",
+                      isFirstActive && "text-brand",
                       firstItem.disabled && "opacity-40 cursor-not-allowed"
                     )}
                   >
-                    {groupIndex === 0 ? (
-                      <AppIcon size={20} />
-                    ) : (
-                      <UserIcon size={20} />
-                    )}
+                    {renderMenuIcon(firstItem.label, firstIconClassName)}
                     <span className="flex-1 text-left">{firstItem.label}</span>
                     {isExpanded ? (
                       <ChevronUpIcon size={16} />
@@ -147,10 +179,19 @@ export const Navigator = () => {
                 </>
               ) : (
                 group.items.map((item) => {
-                  const isActive = item.to && activePath === item.to
+                  const isChildActive =
+                    item.children?.some(
+                      (child) => child.to && child.to === activePath
+                    ) ?? false
+                  const isActive =
+                    (item.to && activePath === item.to) || isChildActive
                   const itemKey = `${group.label}-${item.label}`
                   const hasChildren = (item.children?.length ?? 0) > 0
                   const isItemExpanded = expandedItems.includes(itemKey)
+                  const iconClassName = cn(
+                    "size-5",
+                    isActive ? "text-brand" : "text-neutral-950/60"
+                  )
                   return (
                     <div key={item.label} className="space-y-1">
                       <button
@@ -171,7 +212,7 @@ export const Navigator = () => {
                           item.disabled && "opacity-40 cursor-not-allowed"
                         )}
                       >
-                        <ViewListIcon size={20} />
+                        {renderMenuIcon(item.label, iconClassName)}
                         <span className="flex-1 text-left">{item.label}</span>
                         {hasChildren ? (
                           isItemExpanded ? (
@@ -220,7 +261,7 @@ export const Navigator = () => {
           type="button"
           className="flex size-8 items-center justify-center rounded hover:bg-neutral-950/5"
         >
-          <ViewListIcon size={16} />
+          <MenuCollapseIcon className="size-4 text-neutral-950/60" />
         </button>
       </div>
     </aside>

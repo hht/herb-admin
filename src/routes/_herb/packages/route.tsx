@@ -358,7 +358,7 @@ const PackageSettings = () => {
           </div>
         }
       >
-        <Form form={form} layout="vertical" colon={false}>
+        <Form form={form} layout="vertical" colon={false} labelAlign="top">
           <div className="grid grid-cols-2 gap-8">
             <Form.FormItem
               name="disease"
@@ -433,7 +433,6 @@ const PackageSettings = () => {
             <Form.FormItem
               name="price"
               label="套餐现价"
-              labelAlign="top"
               rules={[{ required: true, message: "请输入价格" }]}
             >
               <InputAdornment className="w-full" append="人民币">
@@ -442,7 +441,6 @@ const PackageSettings = () => {
             </Form.FormItem>
             <Form.FormItem
               name="originalPrice"
-              labelAlign="top"
               label="套餐原价（选填）"
             >
               <InputAdornment className="w-full" append="人民币">

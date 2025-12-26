@@ -87,9 +87,10 @@ export const listAppUserQtn = async (
 }
 
 export const getConsultationDetail = async (batchNo: string) => {
-  const data = await request<ConsultationDetail, Record<string, never>>(
-    `/backend/consultation/detail/${batchNo}`,
-    "GET"
+  const data = await request<ConsultationDetail, { batchNo: string }>(
+    "/backend/user/appUser/qtn/detail",
+    "GET",
+    { batchNo }
   )
   return consultationDetailSchema.parse(data)
 }

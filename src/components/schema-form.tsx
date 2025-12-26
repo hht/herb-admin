@@ -44,7 +44,13 @@ export const SchemaForm = ({
   actionsAlign = "start",
 }: SchemaFormProps) => {
   return (
-    <Form form={form} layout={layout} colon={colon} className={className}>
+    <Form
+      form={form}
+      layout={layout}
+      colon={colon}
+      labelAlign="top"
+      className={className}
+    >
       {schema.map((field) => (
         <Form.FormItem
           key={field.name}

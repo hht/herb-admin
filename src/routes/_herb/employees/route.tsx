@@ -25,11 +25,18 @@ import { buildTableColumns, type TableFieldSchema } from "~/components"
 import { useRequest } from "~/hooks/useRequest"
 import { useHerbStore } from "~/hooks/useStore"
 import {
+  EmployeeAccountIcon,
+  EmployeeBasicIcon,
+  EmployeePermissionIcon,
+} from "~/components/figma-icons"
+import type { SvgIconComponent } from "~/components/figma-icons"
+import {
   createEmployee,
   deleteEmployee,
   getEmployeeDetail,
   listEmployees,
   updateEmployee,
+  updateEmployeeRole,
   type Employee,
   type EmployeeInput,
 } from "~/services/employees"
@@ -105,6 +112,29 @@ function buildFormValues(employee?: Employee | null) {
     role: toNumber(employee?.role),
     password: "",
   }
+}
+
+function renderSectionTitle(
+  Icon: SvgIconComponent,
+  title: string
+) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex size-7 items-center justify-center rounded-full bg-brand-light">
+        <Icon className="size-4" />
+      </div>
+      <span className="text-base font-semibold text-neutral-900">{title}</span>
+    </div>
+  )
+}
+
+function renderRequiredLabel(label: string) {
+  return (
+    <span className="flex items-center gap-1">
+      <span>{label}</span>
+      <span className="text-[#d54941]">*</span>
+    </span>
+  )
 }
 
 function getTabRole(value: string) {
@@ -192,6 +222,10 @@ const EmployeeManagement = () => {
   )
   const { runAsync: runUpdate, loading: updateLoading } = useRequest(
     updateEmployee,
+    { manual: true }
+  )
+  const { runAsync: runRoleUpdate, loading: roleLoading } = useRequest(
+    updateEmployeeRole,
     { manual: true }
   )
   const { runAsync: runDelete } = useRequest(deleteEmployee, { manual: true })
@@ -290,18 +324,15 @@ const EmployeeManagement = () => {
       MessagePlugin.warning("请选择员工权限")
       return
     }
-    const username = permissionTarget.username ?? permissionTarget.phonenumber
-    if (!username) {
+    if (!permissionTarget.username || !permissionTarget.areaCode) {
       MessagePlugin.error("缺少账号信息")
       return
     }
-    await runUpdate({
+    await runRoleUpdate({
       userId: permissionTarget.userId,
-      areaCode: permissionTarget.areaCode ?? "86",
-      username,
-      phonenumber: permissionTarget.phonenumber ?? username,
       role: permissionRole,
-      status: permissionTarget.status ?? "1",
+      username: permissionTarget.username,
+      areaCode: permissionTarget.areaCode,
     })
     MessagePlugin.success("权限已更新")
     closePermissionDialog()
@@ -321,7 +352,7 @@ const EmployeeManagement = () => {
       onConfirm: async () => {
         dialog.setConfirmLoading(true)
         try {
-          await runDelete(employee.userId)
+          await runDelete(employee.userId as number)
           MessagePlugin.success("已删除")
           dialog.hide()
           runAsync()
@@ -571,25 +602,40 @@ const EmployeeManagement = () => {
           </div>
         }
       >
-        <Form form={form} layout="vertical" colon={false}>
-          <div className="space-y-6">
-            <div className="space-y-4">
-              <div className="text-sm font-medium text-neutral-900">
-                员工基础信息
-              </div>
-              <div className="grid grid-cols-2 gap-6">
+        <Form
+          form={form}
+          layout="vertical"
+          colon={false}
+          requiredMark={false}
+          labelAlign="top"
+          className="space-y-8"
+        >
+          <div className="space-y-8">
+            <div className="space-y-6">
+              {renderSectionTitle(EmployeeBasicIcon, "员工基础信息")}
+              <div className="grid grid-cols-2 gap-8">
                 <Form.FormItem
                   name="nickName"
-                  label="员工姓名"
+                  label={renderRequiredLabel("员工姓名")}
                   rules={[{ required: true, message: "请输入员工姓名" }]}
                 >
                   <Input placeholder="请输入员工姓名" />
                 </Form.FormItem>
-                <Form.FormItem name="userId" label="员工编号">
+                <Form.FormItem
+                  name="userId"
+                  label={renderRequiredLabel("员工编号")}
+                >
                   <Input disabled />
                 </Form.FormItem>
-                <Form.FormItem name="sex" label="性别">
-                  <Radio.Group options={SEX_OPTIONS} />
+                <Form.FormItem
+                  name="sex"
+                  label={renderRequiredLabel("性别")}
+                  className="col-span-2"
+                >
+                  <Radio.Group
+                    options={SEX_OPTIONS}
+                    className="radio-group-start gap-6"
+                  />
                 </Form.FormItem>
                 <Form.FormItem name="post" label="职位">
                   <Input placeholder="请输入职位" />
@@ -597,25 +643,22 @@ const EmployeeManagement = () => {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="text-sm font-medium text-neutral-900">
-                账户信息
-              </div>
-              <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-6">
+              {renderSectionTitle(EmployeeAccountIcon, "账户信息")}
+              <div className="grid grid-cols-2 gap-8">
                 <Form.FormItem
                   name="phonenumber"
-                  label="手机号"
+                  label={renderRequiredLabel("手机号码")}
                   rules={[{ required: true, message: "请输入手机号" }]}
                 >
-                  <Input placeholder="请输入手机号" />
+                  <Input placeholder="请输入手机号码" />
                 </Form.FormItem>
-                <Form.FormItem name="email" label="办公邮箱">
-                  <Input placeholder="请输入办公邮箱" />
+                <Form.FormItem name="email" label={renderRequiredLabel("邮箱")}>
+                  <Input placeholder="请输入邮箱地址" />
                 </Form.FormItem>
                 <Form.FormItem
                   name="password"
-                  label="初始密码"
-                  className="col-span-2"
+                  label={editing ? "初始密码" : renderRequiredLabel("初始密码")}
                   rules={
                     editing
                       ? []
@@ -627,15 +670,17 @@ const EmployeeManagement = () => {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="text-sm font-medium text-neutral-900">
-                员工权限
-              </div>
+            <div className="space-y-6">
+              {renderSectionTitle(EmployeePermissionIcon, "员工权限")}
               <Form.FormItem
                 name="role"
+                label={renderRequiredLabel("设置员工权限")}
                 rules={[{ required: true, message: "请选择员工权限" }]}
               >
-                <Radio.Group options={PERMISSION_OPTIONS} />
+                <Radio.Group
+                  options={PERMISSION_OPTIONS}
+                  className="radio-group-start radio-group-stack gap-2"
+                />
               </Form.FormItem>
             </div>
           </div>
@@ -690,6 +735,7 @@ const EmployeeManagement = () => {
       <Dialog
         header="编辑权限"
         visible={permissionVisible}
+        width={480}
         closeOnOverlayClick={false}
         onClose={closePermissionDialog}
         footer={
@@ -700,23 +746,42 @@ const EmployeeManagement = () => {
             <Button
               theme="primary"
               onClick={handlePermissionSubmit}
-              disabled={updateLoading}
+              loading={roleLoading}
             >
-              保存
+              确认更改
             </Button>
           </div>
         }
       >
         <div className="space-y-4">
-          <div className="text-sm text-neutral-600">
-            当前员工：
-            {permissionTarget?.nickName ?? permissionTarget?.username ?? "-"}
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center gap-4">
+              <span className="w-[56px] text-neutral-500">员工姓名</span>
+              <span className="text-neutral-900">
+                {permissionTarget?.nickName ??
+                  permissionTarget?.username ??
+                  "-"}
+              </span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="w-[56px] text-neutral-500">当前权限</span>
+              <span className="text-neutral-900">
+                {getRoleLabel(permissionTarget?.role)}
+              </span>
+            </div>
           </div>
-          <Radio.Group
-            options={PERMISSION_OPTIONS}
-            value={permissionRole}
-            onChange={(value) => setState({ permissionRole: Number(value) })}
-          />
+          <div className="border-t border-border" />
+          <div className="space-y-3">
+            <div className="text-sm font-medium text-neutral-900">
+              设置员工权限
+            </div>
+            <Radio.Group
+              options={PERMISSION_OPTIONS}
+              value={permissionRole}
+              onChange={(value) => setState({ permissionRole: Number(value) })}
+              className="radio-group-start radio-group-stack gap-2"
+            />
+          </div>
         </div>
       </Dialog>
     </div>
