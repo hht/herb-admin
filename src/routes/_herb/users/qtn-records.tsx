@@ -1,9 +1,10 @@
 import dayjs from "dayjs"
-import { useMemo, useState, type ReactNode } from "react"
+import { useMemo, type ReactNode } from "react"
 import {
   Button,
   Checkbox,
   Drawer,
+  Loading,
   MessagePlugin,
   Pagination,
   Popconfirm,
@@ -12,6 +13,7 @@ import {
   Tag,
 } from "tdesign-react"
 import { ChevronLeftIcon, CloseIcon, TimeIcon } from "tdesign-icons-react"
+import { shallow } from "zustand/shallow"
 
 import { useRequest } from "~/hooks/useRequest"
 import {
@@ -23,8 +25,11 @@ import {
   type QtnRecord,
   type QtnRecordPage,
 } from "~/services/app-user-qtn"
+import {
+  DEFAULT_QTN_PAGE,
+  useQtnRecordsStore,
+} from "~/stores/qtn-records-store"
 
-const DEFAULT_PAGE = { pageNum: 1, pageSize: 10 }
 const MAX_COMPARE_COUNT = 2
 
 const formatDateTime = (value?: string | null) => {
@@ -498,20 +503,40 @@ export const QtnRecordsDrawer = ({
   visible,
   onClose,
 }: QtnRecordsDrawerProps) => {
-  const [page, setPage] = useState(DEFAULT_PAGE)
-  const [mode, setMode] = useState<"normal" | "compare">("normal")
-  const [view, setView] = useState<"list" | "detail" | "compare">("list")
-  const [selected, setSelected] = useState<QtnRecord[]>([])
-  const [activeRecord, setActiveRecord] = useState<QtnRecord | null>(null)
-  const [detailData, setDetailData] = useState<ConsultationDetail | null>(null)
-  const [compareData, setCompareData] = useState<ConsultationDetail[]>([])
-  const [symptomFilter, setSymptomFilter] = useState("全部症状")
+  const {
+    page,
+    mode,
+    view,
+    selected,
+    activeRecord,
+    detailData,
+    compareData,
+    symptomFilter,
+    setState,
+    setPage,
+    reset,
+  } = useQtnRecordsStore(
+    (state) => ({
+      page: state.page,
+      mode: state.mode,
+      view: state.view,
+      selected: state.selected,
+      activeRecord: state.activeRecord,
+      detailData: state.detailData,
+      compareData: state.compareData,
+      symptomFilter: state.symptomFilter,
+      setState: state.setState,
+      setPage: state.setPage,
+      reset: state.reset,
+    }),
+    shallow
+  )
 
   const emptyPage: QtnRecordPage = {
     record: [],
     total: 0,
-    pageNum: page.pageNum ?? 1,
-    pageSize: page.pageSize ?? 10,
+    pageNum: page.pageNum ?? DEFAULT_QTN_PAGE.pageNum,
+    pageSize: page.pageSize ?? DEFAULT_QTN_PAGE.pageSize,
   }
 
   const { data, loading } = useRequest(
@@ -526,6 +551,10 @@ export const QtnRecordsDrawer = ({
     {
       refreshDeps: [userId, JSON.stringify(page)],
     }
+  )
+  const { runAsync: runConsultationDetail, loading: detailLoading } = useRequest(
+    (batchNo: string) => getConsultationDetail(batchNo),
+    { manual: true }
   )
 
   const records = useMemo(() => data?.record ?? [], [data])
@@ -542,13 +571,7 @@ export const QtnRecordsDrawer = ({
   }, [records, symptomFilter])
 
   const resetState = () => {
-    setMode("normal")
-    setView("list")
-    setSelected([])
-    setActiveRecord(null)
-    setDetailData(null)
-    setCompareData([])
-    setSymptomFilter("全部症状")
+    reset()
   }
 
   const handleClose = () => {
@@ -563,11 +586,13 @@ export const QtnRecordsDrawer = ({
         MessagePlugin.warning(`最多选择${MAX_COMPARE_COUNT}条记录`)
         return
       }
-      setSelected((prev) => [...prev, record])
+      setState((state) => ({ selected: [...state.selected, record] }))
     } else {
-      setSelected((prev) =>
-        prev.filter((item) => item.batchNo !== record.batchNo)
-      )
+      setState((state) => ({
+        selected: state.selected.filter(
+          (item) => item.batchNo !== record.batchNo
+        ),
+      }))
     }
   }
 
@@ -576,10 +601,9 @@ export const QtnRecordsDrawer = ({
       MessagePlugin.error("缺少问诊记录编号")
       return
     }
-    setActiveRecord(record)
-    setView("detail")
-    const detail = await getConsultationDetail(record.batchNo)
-    setDetailData(detail)
+    setState({ activeRecord: record, view: "detail" })
+    const detail = await runConsultationDetail(record.batchNo)
+    setState({ detailData: detail })
   }
 
   const openCompare = async () => {
@@ -590,10 +614,9 @@ export const QtnRecordsDrawer = ({
     const details = await Promise.all(
       selected
         .filter((record) => record.batchNo)
-        .map((record) => getConsultationDetail(record.batchNo as string))
+        .map((record) => runConsultationDetail(record.batchNo as string))
     )
-    setCompareData(details)
-    setView("compare")
+    setState({ compareData: details, view: "compare" })
   }
 
   const baseColumns = [
@@ -668,8 +691,7 @@ export const QtnRecordsDrawer = ({
           <button
             type="button"
             onClick={() => {
-              setMode("normal")
-              setSelected([])
+              setState({ mode: "normal", selected: [] })
             }}
             className={`h-8 rounded border px-4 text-sm ${
               mode === "normal"
@@ -681,7 +703,7 @@ export const QtnRecordsDrawer = ({
           </button>
           <button
             type="button"
-            onClick={() => setMode("compare")}
+            onClick={() => setState({ mode: "compare" })}
             className={`h-8 rounded border px-4 text-sm ${
               mode === "compare"
                 ? "border-brand bg-brand-light text-brand"
@@ -693,7 +715,7 @@ export const QtnRecordsDrawer = ({
         </div>
         <Select
           value={symptomFilter}
-          onChange={(value) => setSymptomFilter(String(value))}
+          onChange={(value) => setState({ symptomFilter: String(value) })}
           options={symptomOptions.map((item) => ({ label: item, value: item }))}
           className="w-[180px]"
         />
@@ -719,7 +741,7 @@ export const QtnRecordsDrawer = ({
             <Button
               variant="outline"
               onClick={() => {
-                setSelected([])
+                setState({ selected: [] })
               }}
             >
               取消选择
@@ -754,27 +776,29 @@ export const QtnRecordsDrawer = ({
       closeBtn={view === "list" ? true : false}
       footer={null}
     >
-      {view === "list" ? (
-        listView
-      ) : null}
-      {view === "detail" && activeRecord ? (
-        <DetailView
-          record={activeRecord}
-          detail={detailData}
-          userName={userName ?? "用户"}
-          onBack={() => setView("list")}
-          onClose={handleClose}
-        />
-      ) : null}
-      {view === "compare" ? (
-        <CompareView
-          records={selected}
-          details={compareData}
-          userName={userName ?? "用户"}
-          onBack={() => setView("list")}
-          onClose={handleClose}
-        />
-      ) : null}
+      <Loading loading={detailLoading}>
+        {view === "list" ? (
+          listView
+        ) : null}
+        {view === "detail" && activeRecord ? (
+          <DetailView
+            record={activeRecord}
+            detail={detailData}
+            userName={userName ?? "用户"}
+            onBack={() => setState({ view: "list" })}
+            onClose={handleClose}
+          />
+        ) : null}
+        {view === "compare" ? (
+          <CompareView
+            records={selected}
+            details={compareData}
+            userName={userName ?? "用户"}
+            onBack={() => setState({ view: "list" })}
+            onClose={handleClose}
+          />
+        ) : null}
+      </Loading>
     </Drawer>
   )
 }

@@ -52,6 +52,10 @@ function RouteComponent() {
         hxPassword: session.hxPassword,
         hxUserName: session.hxUserName,
         hxUuid: session.hxUuid,
+        role:
+          session.role === undefined || session.role === null
+            ? undefined
+            : Number(session.role),
       })
       if (remember) {
         localStorage.setItem(LAST_ACCOUNT_KEY, parsed.data.username)

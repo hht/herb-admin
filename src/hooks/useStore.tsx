@@ -6,6 +6,7 @@ const initialState = {
   hxUserName: undefined as string | undefined,
   hxPassword: undefined as string | undefined,
   hxUuid: undefined as string | undefined,
+  role: undefined as number | undefined,
 }
 
 type SessionState = typeof initialState
@@ -30,6 +31,7 @@ export const useHerbStore = createWithEqualityFn<HerbStore>()(
         hxUserName: state.hxUserName,
         hxPassword: state.hxPassword,
         hxUuid: state.hxUuid,
+        role: state.role,
       }),
     }
   )

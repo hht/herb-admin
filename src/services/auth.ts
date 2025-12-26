@@ -15,6 +15,7 @@ const loginResponseSchema = z.object({
   hxPassword: z.string().optional(),
   hxUserName: z.string().optional(),
   hxUuid: z.string().optional(),
+  role: z.union([z.string(), z.number()]).optional(),
 })
 
 export type LoginSession = z.infer<typeof loginResponseSchema>

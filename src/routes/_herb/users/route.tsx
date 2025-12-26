@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 import dayjs from "dayjs"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { SearchIcon } from "tdesign-icons-react"
 import {
   Button,
@@ -17,6 +17,7 @@ import {
   Table,
   Tag,
 } from "tdesign-react"
+import { shallow } from "zustand/shallow"
 
 import { buildTableColumns, type TableFieldSchema } from "~/components"
 import { useRequest } from "~/hooks/useRequest"
@@ -26,11 +27,9 @@ import {
   updateAppUser,
   type AppUser,
   type AppUserInput,
-  type AppUserQuery,
 } from "~/services/app-users"
+import { DEFAULT_USER_QUERY, useUserStore } from "~/stores/user-store"
 import { QtnRecordsDrawer } from "./qtn-records"
-
-const DEFAULT_QUERY: AppUserQuery = { pageNum: 1, pageSize: 20, role: "5" }
 
 const SEX_OPTIONS = [
   { label: "男", value: "1" },
@@ -112,64 +111,84 @@ const TABLE_SCHEMA: TableFieldSchema<AppUser>[] = [
 ]
 
 const UserManagement = () => {
-  const [query, setQuery] = useState<AppUserQuery>(DEFAULT_QUERY)
-  const [userId, setUserId] = useState("")
-  const [nickName, setNickName] = useState("")
-  const [username, setUsername] = useState("")
-  const [drawerVisible, setDrawerVisible] = useState(false)
-  const [editing, setEditing] = useState<AppUser | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [blacklisted, setBlacklisted] = useState(false)
-  const [qtnVisible, setQtnVisible] = useState(false)
-  const [qtnUserId, setQtnUserId] = useState<number | undefined>(undefined)
-  const [qtnUserName, setQtnUserName] = useState<string>("")
+  const {
+    query,
+    userId,
+    nickName,
+    username,
+    drawerVisible,
+    editing,
+    blacklisted,
+    qtnVisible,
+    qtnUserId,
+    qtnUserName,
+    setState,
+    setQuery,
+    replaceQuery,
+  } = useUserStore(
+    (state) => ({
+      query: state.query,
+      userId: state.userId,
+      nickName: state.nickName,
+      username: state.username,
+      drawerVisible: state.drawerVisible,
+      editing: state.editing,
+      blacklisted: state.blacklisted,
+      qtnVisible: state.qtnVisible,
+      qtnUserId: state.qtnUserId,
+      qtnUserName: state.qtnUserName,
+      setState: state.setState,
+      setQuery: state.setQuery,
+      replaceQuery: state.replaceQuery,
+    }),
+    shallow
+  )
   const [form] = Form.useForm()
 
   const { data, loading, runAsync } = useRequest(() => listAppUsers(query), {
     refreshDeps: [JSON.stringify(query)],
   })
+  const { runAsync: runDetail, loading: detailLoading } = useRequest(
+    (userId: number) => getAppUserDetail(userId),
+    {
+      manual: true,
+    }
+  )
+  const { runAsync: runUpdate, loading: updateLoading } = useRequest(
+    updateAppUser,
+    { manual: true }
+  )
 
   const records = useMemo(() => data?.record ?? [], [data])
 
   const handleSearch = () => {
-    setQuery((prev) => ({
-      ...prev,
+    setQuery({
       pageNum: 1,
       userId: userId.trim() || undefined,
       nickName: nickName.trim() || undefined,
       username: username.trim() || undefined,
-    }))
+    })
   }
 
   const handleReset = () => {
-    setUserId("")
-    setNickName("")
-    setUsername("")
-    setQuery(DEFAULT_QUERY)
+    setState({ userId: "", nickName: "", username: "" })
+    replaceQuery(DEFAULT_USER_QUERY)
   }
 
   const handleCloseDrawer = () => {
-    setDrawerVisible(false)
-    setEditing(null)
-    setBlacklisted(false)
+    setState({ drawerVisible: false, editing: null, blacklisted: false })
     form.reset()
   }
 
   const openDrawer = async (user: AppUser) => {
-    setDrawerVisible(true)
-    setEditing(user)
+    setState({ drawerVisible: true, editing: user })
     form.setFieldsValue(buildFormValues(user))
-    setBlacklisted(isBlacklisted(user))
+    setState({ blacklisted: isBlacklisted(user) })
     if (!user.userId) return
-    try {
-      setDetailLoading(true)
-      const detail = await getAppUserDetail(user.userId)
-      setEditing(detail)
-      form.setFieldsValue(buildFormValues(detail))
-      setBlacklisted(isBlacklisted(detail))
-    } finally {
-      setDetailLoading(false)
-    }
+    const detail = await runDetail(user.userId)
+    setState({ editing: detail })
+    form.setFieldsValue(buildFormValues(detail))
+    setState({ blacklisted: isBlacklisted(detail) })
   }
 
   const handleSubmit = async () => {
@@ -193,7 +212,7 @@ const UserManagement = () => {
       role: editing.role ?? "5",
     }
 
-    await updateAppUser(payload)
+    await runUpdate(payload)
     MessagePlugin.success("保存成功")
     handleCloseDrawer()
     runAsync()
@@ -204,7 +223,7 @@ const UserManagement = () => {
       MessagePlugin.error("缺少用户信息，无法删除")
       return
     }
-    await updateAppUser({
+    await runUpdate({
       userId: user.userId,
       username: user.username,
       areaCode: user.areaCode ?? "86",
@@ -220,20 +239,21 @@ const UserManagement = () => {
       MessagePlugin.error("缺少用户编号")
       return
     }
-    setQtnUserId(user.userId)
-    setQtnUserName(user.nickName ?? user.username ?? "用户")
-    setQtnVisible(true)
+    setState({
+      qtnUserId: user.userId,
+      qtnUserName: user.nickName ?? user.username ?? "用户",
+      qtnVisible: true,
+    })
   }
 
   const handleChangePage = (pageInfo: {
     current: number
     pageSize: number
   }) => {
-    setQuery((prev) => ({
-      ...prev,
+    setQuery({
       pageNum: pageInfo.current,
       pageSize: pageInfo.pageSize,
-    }))
+    })
   }
 
   const columns = buildTableColumns<AppUser>([
@@ -262,6 +282,7 @@ const UserManagement = () => {
           <Popconfirm
             content="确定删除该用户吗？"
             onConfirm={() => handleDelete(row)}
+            confirmBtn={{ loading: updateLoading }}
           >
             <Button theme="danger" variant="text">
               删除
@@ -279,7 +300,7 @@ const UserManagement = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3  items-center gap-4">
             <Input
               value={userId}
-              onChange={(value) => setUserId(value)}
+              onChange={(value) => setState({ userId: value })}
               onEnter={handleSearch}
               placeholder="请输入用户编号"
               className="w-[200px]"
@@ -287,14 +308,14 @@ const UserManagement = () => {
             />
             <Input
               value={nickName}
-              onChange={(value) => setNickName(value)}
+              onChange={(value) => setState({ nickName: value })}
               onEnter={handleSearch}
               placeholder="请输入用户姓名"
               className="w-[200px]"
             />
             <Input
               value={username}
-              onChange={(value) => setUsername(value)}
+              onChange={(value) => setState({ username: value })}
               onEnter={handleSearch}
               placeholder="请输入手机号"
               className="w-[200px]"
@@ -347,6 +368,7 @@ const UserManagement = () => {
             <Button
               theme="primary"
               onClick={handleSubmit}
+              loading={updateLoading}
               disabled={detailLoading}
             >
               保存
@@ -407,7 +429,10 @@ const UserManagement = () => {
           </Form.FormItem>
           <div className="col-span-2 flex items-center gap-4">
             <span className="text-sm text-neutral-950/90">是否拉黑</span>
-            <Switch value={blacklisted} onChange={setBlacklisted} />
+            <Switch
+              value={blacklisted}
+              onChange={(value) => setState({ blacklisted: value })}
+            />
           </div>
         </Form>
       </Drawer>
@@ -416,7 +441,7 @@ const UserManagement = () => {
         userId={qtnUserId}
         userName={qtnUserName}
         visible={qtnVisible}
-        onClose={() => setQtnVisible(false)}
+        onClose={() => setState({ qtnVisible: false })}
       />
     </div>
   )

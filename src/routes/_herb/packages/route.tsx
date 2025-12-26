@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 import dayjs from "dayjs"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { AddIcon, CloseIcon, SearchIcon } from "tdesign-icons-react"
 import {
   Button,
@@ -14,6 +14,7 @@ import {
   Popconfirm,
   Textarea,
 } from "tdesign-react"
+import { shallow } from "zustand/shallow"
 
 import { useRequest } from "~/hooks/useRequest"
 import {
@@ -25,16 +26,12 @@ import {
   type HealthContentInput,
   type HealthTemplate,
   type HealthTemplateInput,
-  type HealthTemplateQuery,
 } from "~/services/health-templates"
-
-const DEFAULT_QUERY: HealthTemplateQuery = { pageNum: 1, pageSize: 8 }
-
-const createEmptyContent = (index: number): HealthContentInput => ({
-  title: `服务${index + 1}`,
-  name: "",
-  content: "",
-})
+import {
+  DEFAULT_PACKAGE_QUERY,
+  createEmptyContent,
+  usePackageStore,
+} from "~/stores/package-store"
 
 const buildContentState = (template?: HealthTemplate | null) => {
   if (!template?.contents?.length) {
@@ -69,14 +66,28 @@ const formatTime = (value?: string | null) => {
 }
 
 const PackageSettings = () => {
-  const [query, setQuery] = useState<HealthTemplateQuery>(DEFAULT_QUERY)
-  const [keyword, setKeyword] = useState("")
-  const [drawerVisible, setDrawerVisible] = useState(false)
-  const [editing, setEditing] = useState<HealthTemplate | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [contents, setContents] = useState<HealthContentInput[]>([
-    createEmptyContent(0),
-  ])
+  const {
+    query,
+    keyword,
+    drawerVisible,
+    editing,
+    contents,
+    setState,
+    setQuery,
+    replaceQuery,
+  } = usePackageStore(
+    (state) => ({
+      query: state.query,
+      keyword: state.keyword,
+      drawerVisible: state.drawerVisible,
+      editing: state.editing,
+      contents: state.contents,
+      setState: state.setState,
+      setQuery: state.setQuery,
+      replaceQuery: state.replaceQuery,
+    }),
+    shallow
+  )
   const [form] = Form.useForm()
 
   const { data, loading, runAsync } = useRequest(
@@ -85,20 +96,35 @@ const PackageSettings = () => {
       refreshDeps: [JSON.stringify(query)],
     }
   )
+  const { runAsync: runDetail, loading: detailLoading } = useRequest(
+    (packageId: number) => getHealthTemplateDetail(packageId),
+    { manual: true }
+  )
+  const { runAsync: runCreate, loading: createLoading } = useRequest(
+    createHealthTemplate,
+    { manual: true }
+  )
+  const { runAsync: runUpdate, loading: updateLoading } = useRequest(
+    updateHealthTemplate,
+    { manual: true }
+  )
+  const { runAsync: runDelete, loading: deleteLoading } = useRequest(
+    deleteHealthTemplate,
+    { manual: true }
+  )
 
   const cards = useMemo(() => data?.record ?? [], [data])
 
   const handleSearch = () => {
-    setQuery((prev) => ({
-      ...prev,
+    setQuery({
       pageNum: 1,
       name: keyword.trim() || undefined,
-    }))
+    })
   }
 
   const handleReset = () => {
-    setKeyword("")
-    setQuery(DEFAULT_QUERY)
+    setState({ keyword: "" })
+    replaceQuery(DEFAULT_PACKAGE_QUERY)
   }
 
   const fillForm = (template: HealthTemplate) => {
@@ -117,31 +143,25 @@ const PackageSettings = () => {
   }
 
   const openDrawer = async (template?: HealthTemplate) => {
-    setDrawerVisible(true)
+    setState({ drawerVisible: true })
     if (!template) {
-      setEditing(null)
+      setState({ editing: null })
       form.reset()
-      setContents([createEmptyContent(0)])
+      setState({ contents: [createEmptyContent(0)] })
       return
     }
-    setEditing(template)
+    setState({ editing: template })
     fillForm(template)
-    setContents(buildContentState(template))
+    setState({ contents: buildContentState(template) })
     if (!template.packageId) return
-    try {
-      setDetailLoading(true)
-      const detail = await getHealthTemplateDetail(template.packageId)
-      setEditing(detail)
-      fillForm(detail)
-      setContents(buildContentState(detail))
-    } finally {
-      setDetailLoading(false)
-    }
+    const detail = await runDetail(template.packageId)
+    setState({ editing: detail, contents: buildContentState(detail) })
+    fillForm(detail)
   }
 
   const handleDelete = async (template: HealthTemplate) => {
     if (!template.packageId) return
-    await deleteHealthTemplate(template.packageId)
+    await runDelete(template.packageId)
     MessagePlugin.success("已删除")
     runAsync()
   }
@@ -168,13 +188,13 @@ const PackageSettings = () => {
     }
 
     if (editing) {
-      await updateHealthTemplate(payload)
+      await runUpdate(payload)
       MessagePlugin.success("更新成功")
     } else {
-      await createHealthTemplate(payload)
+      await runCreate(payload)
       MessagePlugin.success("创建成功")
     }
-    setDrawerVisible(false)
+    setState({ drawerVisible: false })
     runAsync()
   }
 
@@ -182,24 +202,27 @@ const PackageSettings = () => {
     current: number
     pageSize: number
   }) => {
-    setQuery((prev) => ({
-      ...prev,
+    setQuery({
       pageNum: pageInfo.current,
       pageSize: pageInfo.pageSize,
-    }))
+    })
   }
 
   const handleAddService = () => {
-    setContents((prev) => [...prev, createEmptyContent(prev.length)])
+    setState((state) => ({
+      contents: [...state.contents, createEmptyContent(state.contents.length)],
+    }))
   }
 
   const handleRemoveService = (index: number) => {
-    setContents((prev) => {
-      const next = prev.filter((_, itemIndex) => itemIndex !== index)
-      return next.map((item, itemIndex) => ({
-        ...item,
-        title: item.title?.trim() || `服务${itemIndex + 1}`,
-      }))
+    setState((state) => {
+      const next = state.contents.filter((_, itemIndex) => itemIndex !== index)
+      return {
+        contents: next.map((item, itemIndex) => ({
+          ...item,
+          title: item.title?.trim() || `服务${itemIndex + 1}`,
+        })),
+      }
     })
   }
 
@@ -208,11 +231,11 @@ const PackageSettings = () => {
     key: keyof HealthContentInput,
     value: string
   ) => {
-    setContents((prev) =>
-      prev.map((item, itemIndex) =>
+    setState((state) => ({
+      contents: state.contents.map((item, itemIndex) =>
         itemIndex === index ? { ...item, [key]: value } : item
-      )
-    )
+      ),
+    }))
   }
 
   return (
@@ -222,7 +245,7 @@ const PackageSettings = () => {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <Input
               value={keyword}
-              onChange={(value) => setKeyword(value)}
+              onChange={(value) => setState({ keyword: value })}
               onEnter={handleSearch}
               placeholder="搜索套餐名称"
               className="w-[332px]"
@@ -275,6 +298,7 @@ const PackageSettings = () => {
                       <Popconfirm
                         content="确定删除该套餐吗？"
                         onConfirm={() => handleDelete(item)}
+                        confirmBtn={{ loading: deleteLoading }}
                       >
                         <button
                           type="button"
@@ -314,17 +338,21 @@ const PackageSettings = () => {
         visible={drawerVisible}
         placement="right"
         size="760px"
-        onClose={() => setDrawerVisible(false)}
+        onClose={() => setState({ drawerVisible: false })}
         footer={
           <div className="flex items-center gap-2">
             <Button
               theme="primary"
               onClick={handleSubmit}
+              loading={createLoading || updateLoading}
               disabled={detailLoading}
             >
               {editing ? "保存" : "创建"}
             </Button>
-            <Button variant="outline" onClick={() => setDrawerVisible(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setState({ drawerVisible: false })}
+            >
               取消
             </Button>
           </div>

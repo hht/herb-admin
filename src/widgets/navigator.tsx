@@ -25,7 +25,7 @@ const MENU_GROUPS: {
     expandable: true,
     items: [
       { label: "聊天室", to: "/dashboard" },
-      { label: "消息" },
+      { label: "消息", to: "/dashboard" },
       { label: "未读" },
       { label: "问诊" },
       { label: "内部" },

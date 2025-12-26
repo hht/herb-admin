@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 import dayjs from "dayjs"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { MoreIcon, SearchIcon } from "tdesign-icons-react"
 import {
   Button,
@@ -19,9 +19,11 @@ import {
   Tag,
   Tabs,
 } from "tdesign-react"
+import { shallow } from "zustand/shallow"
 
 import { buildTableColumns, type TableFieldSchema } from "~/components"
 import { useRequest } from "~/hooks/useRequest"
+import { useHerbStore } from "~/hooks/useStore"
 import {
   createEmployee,
   deleteEmployee,
@@ -30,10 +32,8 @@ import {
   updateEmployee,
   type Employee,
   type EmployeeInput,
-  type EmployeeQuery,
 } from "~/services/employees"
-
-const DEFAULT_QUERY: EmployeeQuery = { pageNum: 1, pageSize: 20 }
+import { useEmployeeStore } from "~/stores/employee-store"
 
 const TAB_OPTIONS = [
   { label: "全部员工", value: "all", role: undefined },
@@ -144,93 +144,108 @@ const TABLE_SCHEMA: TableFieldSchema<Employee>[] = [
 ]
 
 const EmployeeManagement = () => {
-  const [query, setQuery] = useState<EmployeeQuery>(DEFAULT_QUERY)
-  const [activeTab, setActiveTab] = useState("all")
-  const [keyword, setKeyword] = useState("")
-  const [drawerVisible, setDrawerVisible] = useState(false)
-  const [detailVisible, setDetailVisible] = useState(false)
-  const [editing, setEditing] = useState<Employee | null>(null)
-  const [detail, setDetail] = useState<Employee | null>(null)
-  const [formLoading, setFormLoading] = useState(false)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [permissionVisible, setPermissionVisible] = useState(false)
-  const [permissionLoading, setPermissionLoading] = useState(false)
-  const [permissionTarget, setPermissionTarget] = useState<Employee | null>(
-    null
-  )
-  const [permissionRole, setPermissionRole] = useState<number | undefined>(
-    undefined
+  const currentRole = useHerbStore((state) => state.role)
+  const {
+    query,
+    activeTab,
+    keyword,
+    drawerVisible,
+    detailVisible,
+    editing,
+    detail,
+    permissionVisible,
+    permissionTarget,
+    permissionRole,
+    setState,
+    setQuery,
+  } = useEmployeeStore(
+    (state) => ({
+      query: state.query,
+      activeTab: state.activeTab,
+      keyword: state.keyword,
+      drawerVisible: state.drawerVisible,
+      detailVisible: state.detailVisible,
+      editing: state.editing,
+      detail: state.detail,
+      permissionVisible: state.permissionVisible,
+      permissionTarget: state.permissionTarget,
+      permissionRole: state.permissionRole,
+      setState: state.setState,
+      setQuery: state.setQuery,
+    }),
+    shallow
   )
   const [form] = Form.useForm()
 
   const { data, loading, runAsync } = useRequest(() => listEmployees(query), {
     refreshDeps: [JSON.stringify(query)],
   })
+  const { runAsync: runDetail, loading: detailLoading } = useRequest(
+    (userId: number) => getEmployeeDetail(userId),
+    {
+      manual: true,
+    }
+  )
+  const { runAsync: runCreate, loading: createLoading } = useRequest(
+    createEmployee,
+    { manual: true }
+  )
+  const { runAsync: runUpdate, loading: updateLoading } = useRequest(
+    updateEmployee,
+    { manual: true }
+  )
+  const { runAsync: runDelete } = useRequest(deleteEmployee, { manual: true })
 
   const records = useMemo(() => data?.record ?? [], [data])
+  const canEdit = toNumber(currentRole) === 1
 
   const handleSearch = () => {
-    setQuery((prev) => ({
-      ...prev,
+    setQuery({
       pageNum: 1,
       nickName: keyword.trim() || undefined,
-    }))
+    })
   }
 
   const handleTabChange = (value: string | number) => {
     const nextTab = String(value)
     const role = getTabRole(nextTab)
-    setActiveTab(nextTab)
-    setQuery((prev) => ({
-      ...prev,
+    setState({ activeTab: nextTab })
+    setQuery({
       pageNum: 1,
       role: role ? String(role) : undefined,
-    }))
+    })
   }
 
   const openFormDrawer = async (employee?: Employee) => {
-    setDrawerVisible(true)
+    setState({ drawerVisible: true })
     if (!employee) {
-      setEditing(null)
+      setState({ editing: null })
       form.reset()
       form.setFieldsValue({ role: undefined })
       return
     }
-    setEditing(employee)
+    setState({ editing: employee })
     form.setFieldsValue(buildFormValues(employee))
     if (!employee.userId) return
-    try {
-      setFormLoading(true)
-      const detailData = await getEmployeeDetail(employee.userId)
-      setEditing(detailData)
-      form.setFieldsValue(buildFormValues(detailData))
-    } finally {
-      setFormLoading(false)
-    }
+    const detailData = await runDetail(employee.userId)
+    setState({ editing: detailData })
+    form.setFieldsValue(buildFormValues(detailData))
   }
 
   const closeFormDrawer = () => {
-    setDrawerVisible(false)
-    setEditing(null)
+    setState({ drawerVisible: false, editing: null })
     form.reset()
   }
 
   const openDetailDrawer = async (employee: Employee) => {
-    setDetailVisible(true)
-    setDetail(employee)
+    setState({ detailVisible: true, detail: employee })
     if (!employee.userId) return
-    try {
-      setDetailLoading(true)
-      const detailData = await getEmployeeDetail(employee.userId)
-      setDetail(detailData)
-    } finally {
-      setDetailLoading(false)
-    }
+    const detailData = await runDetail(employee.userId)
+    setState({ detail: detailData })
   }
 
   const closeDetailDrawer = () => {
-    setDetailVisible(false)
-    setDetail(null)
+    setState({ detailVisible: false, detail: null })
   }
 
   const handleContact = (employee: Employee) => {
@@ -245,24 +260,25 @@ const EmployeeManagement = () => {
   }
 
   const openPermissionDialog = async (employee: Employee) => {
-    setPermissionVisible(true)
-    setPermissionTarget(employee)
-    setPermissionRole(toNumber(employee.role))
+    setState({
+      permissionVisible: true,
+      permissionTarget: employee,
+      permissionRole: toNumber(employee.role),
+    })
     if (!employee.userId || (employee.username && employee.areaCode)) return
-    try {
-      setPermissionLoading(true)
-      const detailData = await getEmployeeDetail(employee.userId)
-      setPermissionTarget(detailData)
-      setPermissionRole(toNumber(detailData.role))
-    } finally {
-      setPermissionLoading(false)
-    }
+    const detailData = await runDetail(employee.userId)
+    setState({
+      permissionTarget: detailData,
+      permissionRole: toNumber(detailData.role),
+    })
   }
 
   const closePermissionDialog = () => {
-    setPermissionVisible(false)
-    setPermissionTarget(null)
-    setPermissionRole(undefined)
+    setState({
+      permissionVisible: false,
+      permissionTarget: null,
+      permissionRole: undefined,
+    })
   }
 
   const handlePermissionSubmit = async () => {
@@ -279,22 +295,17 @@ const EmployeeManagement = () => {
       MessagePlugin.error("缺少账号信息")
       return
     }
-    try {
-      setPermissionLoading(true)
-      await updateEmployee({
-        userId: permissionTarget.userId,
-        areaCode: permissionTarget.areaCode ?? "86",
-        username,
-        phonenumber: permissionTarget.phonenumber ?? username,
-        role: permissionRole,
-        status: permissionTarget.status ?? "1",
-      })
-      MessagePlugin.success("权限已更新")
-      closePermissionDialog()
-      runAsync()
-    } finally {
-      setPermissionLoading(false)
-    }
+    await runUpdate({
+      userId: permissionTarget.userId,
+      areaCode: permissionTarget.areaCode ?? "86",
+      username,
+      phonenumber: permissionTarget.phonenumber ?? username,
+      role: permissionRole,
+      status: permissionTarget.status ?? "1",
+    })
+    MessagePlugin.success("权限已更新")
+    closePermissionDialog()
+    runAsync()
   }
 
   const handleDelete = (employee: Employee) => {
@@ -308,10 +319,15 @@ const EmployeeManagement = () => {
       confirmBtn: "删除",
       cancelBtn: "取消",
       onConfirm: async () => {
-        await deleteEmployee(employee.userId)
-        MessagePlugin.success("已删除")
-        dialog.hide()
-        runAsync()
+        dialog.setConfirmLoading(true)
+        try {
+          await runDelete(employee.userId)
+          MessagePlugin.success("已删除")
+          dialog.hide()
+          runAsync()
+        } finally {
+          dialog.setConfirmLoading(false)
+        }
       },
       onClose: () => dialog.hide(),
     })
@@ -336,38 +352,32 @@ const EmployeeManagement = () => {
       phonenumber: phone,
     }
 
-    try {
-      setFormLoading(true)
-      if (editing) {
-        if (!values.password) {
-          delete payload.password
-        }
-        await updateEmployee(payload)
-        MessagePlugin.success("更新成功")
-      } else {
-        const createPayload = {
-          ...payload,
-          password: String(values.password ?? ""),
-        } as EmployeeInput & { password: string }
-        await createEmployee(createPayload)
-        MessagePlugin.success("创建成功")
+    if (editing) {
+      if (!values.password) {
+        delete payload.password
       }
-      closeFormDrawer()
-      runAsync()
-    } finally {
-      setFormLoading(false)
+      await runUpdate(payload)
+      MessagePlugin.success("更新成功")
+    } else {
+      const createPayload = {
+        ...payload,
+        password: String(values.password ?? ""),
+      } as EmployeeInput & { password: string }
+      await runCreate(createPayload)
+      MessagePlugin.success("创建成功")
     }
+    closeFormDrawer()
+    runAsync()
   }
 
   const handleChangePage = (pageInfo: {
     current: number
     pageSize: number
   }) => {
-    setQuery((prev) => ({
-      ...prev,
+    setQuery({
       pageNum: pageInfo.current,
       pageSize: pageInfo.pageSize,
-    }))
+    })
   }
 
   const columns = buildTableColumns<Employee>([
@@ -399,45 +409,63 @@ const EmployeeManagement = () => {
       title: "操作",
       width: 260,
       fixed: "right",
-      render: (row) => (
-        <Space size="small">
-          <Button
-            theme="primary"
-            variant="text"
-            onClick={() => handleContact(row)}
-          >
-            联系
-          </Button>
-          <Button
-            theme="primary"
-            variant="text"
-            onClick={() => openPermissionDialog(row)}
-          >
-            编辑权限
-          </Button>
-          <Dropdown
-            trigger="click"
-            placement="bottom-right"
-            options={[
-              { content: "管理", value: "manage" },
-              { content: "删除", value: "delete", theme: "error" },
-            ]}
-            onClick={(option) => {
-              if (option.value === "manage") {
-                openFormDrawer(row)
-                return
-              }
-              if (option.value === "delete") {
-                handleDelete(row)
-              }
-            }}
-          >
-            <Button variant="text" className="px-2">
-              <MoreIcon size={16} />
+      render: (row) =>
+        canEdit ? (
+          <Space size="small">
+            <Button
+              theme="primary"
+              variant="text"
+              onClick={() => handleContact(row)}
+            >
+              联系
             </Button>
-          </Dropdown>
-        </Space>
-      ),
+            <Button
+              theme="primary"
+              variant="text"
+              onClick={() => openPermissionDialog(row)}
+            >
+              编辑权限
+            </Button>
+            <Dropdown
+              trigger="click"
+              placement="bottom-right"
+              options={[
+                { content: "管理", value: "manage" },
+                { content: "删除", value: "delete", theme: "error" },
+              ]}
+              onClick={(option) => {
+                if (option.value === "manage") {
+                  openFormDrawer(row)
+                  return
+                }
+                if (option.value === "delete") {
+                  handleDelete(row)
+                }
+              }}
+            >
+              <Button variant="text" className="px-2">
+                <MoreIcon size={16} />
+              </Button>
+            </Dropdown>
+          </Space>
+        ) : (
+          <Space size="small">
+            <Button
+              theme="primary"
+              variant="text"
+              onClick={() => handleContact(row)}
+            >
+              联系
+            </Button>
+            <Button
+              theme="primary"
+              variant="text"
+              onClick={() => openDetailDrawer(row)}
+            >
+              查看详情
+            </Button>
+          </Space>
+        ),
     },
   ])
 
@@ -451,7 +479,7 @@ const EmployeeManagement = () => {
     },
     { label: "办公邮箱", value: detail?.email ?? "-" },
     { label: "职位", value: detail?.post ?? "-" },
-    { label: "员工权限", value: getRoleLabel(detail?.role) },
+    { label: "员工权限", value: getRoleLabel(detail?.role), span: 3 },
   ]
 
   return (
@@ -466,20 +494,34 @@ const EmployeeManagement = () => {
               onChange={handleTabChange}
             />
           </div>
-          <div className="flex flex-wrap py-4 items-center justify-between gap-4">
-            <Button theme="primary" onClick={() => openFormDrawer()}>
-              新增员工
-            </Button>
-            <div className="w-[240px]">
-              <Input
-                value={keyword}
-                onChange={(value) => setKeyword(value)}
-                onEnter={handleSearch}
-                placeholder="请输入员工姓名"
-                suffixIcon={<SearchIcon size={16} />}
-              />
+          {canEdit ? (
+            <div className="flex flex-wrap py-4 items-center justify-between gap-4">
+              <Button theme="primary" onClick={() => openFormDrawer()}>
+                新增员工
+              </Button>
+              <div className="w-[240px]">
+                <Input
+                  value={keyword}
+                  onChange={(value) => setState({ keyword: value })}
+                  onEnter={handleSearch}
+                  placeholder="请输入员工姓名"
+                  suffixIcon={<SearchIcon size={16} />}
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-wrap py-4 items-center gap-4">
+              <div className="w-[240px]">
+                <Input
+                  value={keyword}
+                  onChange={(value) => setState({ keyword: value })}
+                  onEnter={handleSearch}
+                  placeholder="请输入员工姓名"
+                  suffixIcon={<SearchIcon size={16} />}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="my-6 border-t border-border" />
 
@@ -519,7 +561,7 @@ const EmployeeManagement = () => {
             <Button
               theme="primary"
               onClick={handleSubmit}
-              disabled={formLoading}
+              disabled={createLoading || updateLoading}
             >
               保存
             </Button>
@@ -608,19 +650,39 @@ const EmployeeManagement = () => {
         size="640px"
         onClose={closeDetailDrawer}
         footer={
-          <Button theme="primary" onClick={closeDetailDrawer}>
-            返回
-          </Button>
+          <div className="flex justify-start">
+            <Button theme="primary" onClick={closeDetailDrawer}>
+              返回
+            </Button>
+          </div>
         }
       >
         <Loading loading={detailLoading}>
-          <div className="grid grid-cols-2 gap-x-12 gap-y-6">
-            {detailItems.map((item) => (
-              <div key={item.label} className="space-y-1">
-                <div className="text-xs text-neutral-500">{item.label}</div>
-                <div className="text-sm text-neutral-900">{item.value}</div>
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex size-6 items-center justify-center rounded bg-brand text-white">
+                  <span className="text-xs">员</span>
+                </div>
+                <span className="text-sm font-medium text-neutral-900">
+                  员工信息
+                </span>
               </div>
-            ))}
+              <Button variant="text" className="px-2">
+                <MoreIcon size={16} />
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-x-12 gap-y-6">
+              {detailItems.map((item) => (
+                <div
+                  key={item.label}
+                  className={`space-y-1 ${item.span ? "col-span-3" : ""}`}
+                >
+                  <div className="text-xs text-neutral-500">{item.label}</div>
+                  <div className="text-sm text-neutral-900">{item.value}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </Loading>
       </Drawer>
@@ -638,7 +700,7 @@ const EmployeeManagement = () => {
             <Button
               theme="primary"
               onClick={handlePermissionSubmit}
-              disabled={permissionLoading}
+              disabled={updateLoading}
             >
               保存
             </Button>
@@ -653,7 +715,7 @@ const EmployeeManagement = () => {
           <Radio.Group
             options={PERMISSION_OPTIONS}
             value={permissionRole}
-            onChange={(value) => setPermissionRole(Number(value))}
+            onChange={(value) => setState({ permissionRole: Number(value) })}
           />
         </div>
       </Dialog>
