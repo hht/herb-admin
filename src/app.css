@@ -184,6 +184,45 @@ body {
 
 .qtn-drawer .t-drawer__body {
   padding: 0;
+  overflow: hidden !important;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.qtn-drawer .t-drawer__body .t-drawer__content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.qtn-drawer .t-drawer__body .t-drawer__content > div {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.qtn-drawer .t-loading__parent {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.qtn-drawer .t-loading__content {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.qtn-drawer .t-loading__parent > div {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .qtn-drawer .t-drawer__footer {
