@@ -17,6 +17,7 @@ import {
   isOrderCustomMessage,
 } from "~/components/chat/order-custom-message"
 import { cn } from "~/libs/utils"
+import { fetchChatUserProfilesByUserIds } from "~/services/chat-user-profiles"
 import { useOrderStore } from "~/stores/order-store"
 
 const TABS: { label: string; value: SidebarTab }[] = [
@@ -54,8 +55,14 @@ const ChatWorkspace = () => {
       onCallStatusChanged: (status) => {
         console.info("CallKit status", status)
       },
-      userInfoProvider: async (userIds) =>
-        userIds.map((userId) => ({ userId, nickname: userId })),
+      userInfoProvider: async (userIds) => {
+        const profiles = await fetchChatUserProfilesByUserIds(userIds)
+        return userIds.map((userId) => ({
+          userId,
+          nickname: profiles[userId.trim()]?.nickname ?? userId,
+          avatarUrl: profiles[userId.trim()]?.avatarurl ?? undefined,
+        }))
+      },
     }),
     [client]
   )

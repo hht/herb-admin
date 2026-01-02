@@ -11,7 +11,11 @@ import { useMemo } from "react"
 import { useRef } from "react"
 import { useHerbStore } from "~/hooks/useStore"
 import { EASEMOB_APP_KEY } from "~/libs/constants"
-import { fetchChatUserProfileByUsername } from "~/services/chat-user-profiles"
+import { fetchAppUserNicknamesByUsernames } from "~/services/chat-app-user-nicknames"
+import {
+  fetchChatUserProfilesByUserIds,
+  getFallbackAvatarUrl,
+} from "~/services/chat-user-profiles"
 import { CallKitProvider } from "./callkit-provider"
 
 const toRecord = (value: unknown): Record<string, unknown> =>
@@ -55,16 +59,6 @@ const EasemobAfterLoginBootstrap = () => {
   const bootstrappedRef = useRef(false)
 
   useEffect(() => {
-    const debugEnabled =
-      (typeof import.meta !== "undefined" && Boolean(import.meta.env?.DEV)) ||
-      (typeof window !== "undefined" &&
-        window.localStorage?.getItem("easemob_debug") === "1")
-
-    const debug = (...args: unknown[]) => {
-      if (!debugEnabled) return
-      console.debug("[easemob-bootstrap]", ...args)
-    }
-
     const typedClient = client as unknown as {
       user?: string
       userId?: string
@@ -115,20 +109,6 @@ const EasemobAfterLoginBootstrap = () => {
       userId ||
       ""
 
-    debug("effect", {
-      hasClient: Boolean(typedClient),
-      userId: userId || "-",
-      identity: identity || "-",
-      hxUserName: hxUserName ?? "-",
-      hxUuid: hxUuid ?? "-",
-      userFromContext: typedClient?.context?.userId ?? "-",
-      userFromUser: typedClient?.user ?? "-",
-      hasIsOpened: Boolean(typedClient?.isOpened),
-      hasGetConversationlist: Boolean(typedClient?.getConversationlist),
-      hasGetHistoryMessages: Boolean(typedClient?.getHistoryMessages),
-      hasGetJoinedGroups: Boolean(typedClient?.getJoinedGroups),
-    })
-
     if (!typedClient) return
 
     let cancelled = false
@@ -152,23 +132,14 @@ const EasemobAfterLoginBootstrap = () => {
     }
 
     const run = async () => {
-      debug("bootstrap start")
       const ready = await waitUntilReady()
-      debug("bootstrap ready", {
-        ready,
-        opened: typedClient.isOpened ? typedClient.isOpened() : "unknown",
-        identity: lastUserRef.current || "-",
-        clientUserId: getClientUserId() || "-",
-      })
       if (!ready || cancelled) return
       if (bootstrappedRef.current) {
-        debug("skip bootstrap (already ran)")
         return
       }
       bootstrappedRef.current = true
 
       try {
-        debug("getConversationlist start")
         const result = await typedClient.getConversationlist?.({
           pageNum: 1,
           pageSize: 20,
@@ -178,9 +149,6 @@ const EasemobAfterLoginBootstrap = () => {
         const channelInfos = Array.isArray(data.channel_infos)
           ? (data.channel_infos as unknown[])
           : []
-        debug("getConversationlist ok", {
-          channelInfos: channelInfos.length,
-        })
         const conversations = channelInfos
           .map((item) => {
             const info = toRecord(item)
@@ -201,17 +169,14 @@ const EasemobAfterLoginBootstrap = () => {
           )
 
         if (!cancelled && conversations.length) {
-          debug("setConversation", { count: conversations.length })
           rootStore.conversationStore.setConversation(conversations as any)
           rootStore.addressStore.getSilentModeForConversations(conversations as any)
         }
 
       } catch (error) {
-        debug("bootstrap conversations/history failed", error)
       }
 
       try {
-        debug("getJoinedGroups start")
         const pageSize = 200
         const maxPages = 10
         // 对齐 easemob-chat-uikit 的实现：pageNum 从 1 开始，避免部分环境下 0 导致异常
@@ -220,21 +185,18 @@ const EasemobAfterLoginBootstrap = () => {
         let hasNext = true
 
         while (hasNext && pageNum <= maxPages) {
-          debug("getJoinedGroups page", { pageNum, pageSize })
           const result = await typedClient.getJoinedGroups?.({
             pageNum,
             pageSize,
           })
           const record = toRecord(result)
           const data = Array.isArray(record.data) ? (record.data as unknown[]) : []
-          debug("getJoinedGroups page ok", { pageNum, groups: data.length })
           merged.push(...data)
           hasNext = data.length === pageSize
           pageNum += 1
         }
 
         if (!cancelled) {
-          debug("setGroups", { count: merged.length, hasNext })
           setGroups(merged as any)
           rootStore.addressStore.setHasGroupsNext(hasNext)
 
@@ -265,23 +227,18 @@ const EasemobAfterLoginBootstrap = () => {
             .filter((c): c is NonNullable<typeof c> => Boolean(c))
 
           if (groupConversationsToAdd.length) {
-            debug("setConversation (from groups)", { count: groupConversationsToAdd.length })
             rootStore.conversationStore.setConversation(groupConversationsToAdd as any)
             rootStore.addressStore.getSilentModeForConversations(groupConversationsToAdd as any)
           }
         }
       } catch (error) {
-        debug("bootstrap joined groups failed", error)
       }
-
-      debug("bootstrap done")
     }
 
     run()
 
     return () => {
       cancelled = true
-      debug("cleanup")
     }
   }, [client, hxUserName, hxUuid])
 
@@ -306,12 +263,45 @@ const EasemobUserProfileSync = () => {
     if (!client) return
     const typedClient = client as unknown as {
       user?: string
+      userId?: string
+      context?: { userId?: string }
       isOpened?: () => boolean
       updateUserInfo?: (payload: Record<string, unknown>) => Promise<unknown>
     }
     if (typedClient.isOpened && !typedClient.isOpened()) return
 
+    const debugEnabled = (() => {
+      const localFlag = (key: string) => {
+        if (typeof window === "undefined") return false
+        const value = window.localStorage?.getItem(key)
+        if (!value) return false
+        const normalized = value.trim().toLowerCase()
+        if (!normalized) return false
+        return !["0", "false", "off", "no"].includes(normalized)
+      }
+      return localFlag("easemob_profile_debug")
+    })()
+    const debug = (...args: unknown[]) => {
+      if (!debugEnabled) return
+      console.log("[easemob-userprofile-sync]", ...args)
+    }
+
     const cancelledRef = { current: false }
+
+    const getClientUserId = () => {
+      const fromContext =
+        typeof typedClient?.context?.userId === "string"
+          ? typedClient.context.userId.trim()
+          : ""
+      if (fromContext) return fromContext
+      const fromUser =
+        typeof typedClient?.user === "string" ? typedClient.user.trim() : ""
+      if (fromUser) return fromUser
+      const fromUserId =
+        typeof typedClient?.userId === "string" ? typedClient.userId.trim() : ""
+      if (fromUserId) return fromUserId
+      return ""
+    }
 
     const mergeAppUserInfo = (patch: Record<string, Record<string, unknown>>) => {
       if (!Object.keys(patch).length) return
@@ -327,9 +317,17 @@ const EasemobUserProfileSync = () => {
     const run = async () => {
       const ids = new Set<string>()
 
-      if (typeof typedClient.user === "string" && typedClient.user.trim()) {
-        ids.add(typedClient.user.trim())
-      }
+      const selfId = getClientUserId()
+      if (selfId) ids.add(selfId)
+
+      debug("run", {
+        opened: typedClient.isOpened ? typedClient.isOpened() : "unknown",
+        selfId: selfId || "-",
+        conversationCount: (conversationList ?? []).length,
+        currentConversation: currentConversation?.conversationId
+          ? `${currentConversation.chatType}:${currentConversation.conversationId}`
+          : "-",
+      })
 
       for (const cvs of conversationList ?? []) {
         if (cvs.chatType !== "singleChat") continue
@@ -355,48 +353,109 @@ const EasemobUserProfileSync = () => {
 
       const appUsersInfo = rootStore.addressStore.appUsersInfo as unknown as Record<
         string,
-        { nickname?: string; avatarurl?: string }
+        { nickname?: string; ext?: string; avatarurl?: string }
       >
       const missing = [...ids].filter((id) => {
         const info = appUsersInfo[id]
         const nickname = typeof info?.nickname === "string" ? info.nickname.trim() : ""
         const avatarurl = typeof info?.avatarurl === "string" ? info.avatarurl.trim() : ""
-        if (nickname || avatarurl) return false
+        const ext = typeof info?.ext === "string" ? info.ext.trim() : ""
+        const hasNickname = Boolean(nickname) && nickname !== id
+        const hasAvatarurl = Boolean(avatarurl)
+        const hasExt = Boolean(ext)
+        if (hasNickname && hasAvatarurl && hasExt) return false
         return !syncedRef.current.has(id)
       })
 
       if (!missing.length) return
+      debug("missing", {
+        total: ids.size,
+        selfId: selfId || "-",
+        missingCount: missing.length,
+        sample: missing.slice(0, 20),
+      })
 
       const patch: Record<string, Record<string, unknown>> = {}
-      await Promise.allSettled(
-        missing.map(async (id) => {
-          const profile = await fetchChatUserProfileByUsername(id)
-          syncedRef.current.add(id)
-          if (!profile || cancelledRef.current) return
-          patch[profile.userId] = {
-            ...(appUsersInfo[profile.userId] as any),
-            userId: profile.userId,
-            nickname: profile.nickname ?? profile.userId,
-            avatarurl: profile.avatarurl ?? (appUsersInfo[profile.userId] as any)?.avatarurl,
-          }
+      const profiles = await fetchChatUserProfilesByUserIds(missing)
+      const needBackendNickname = missing.filter((id) => {
+        const profile = profiles[id]
+        const nickname =
+          typeof profile?.nickname === "string" ? profile.nickname.trim() : ""
+        return !nickname || nickname === id
+      })
+      const backendNicknames = needBackendNickname.length
+        ? await fetchAppUserNicknamesByUsernames(needBackendNickname, { limit: 20 })
+        : {}
 
-          if (!updatedSelfRef.current && typedClient.user && typedClient.user === profile.userId) {
-            updatedSelfRef.current = true
-            if (typedClient.updateUserInfo) {
-              try {
-                const payload: Record<string, unknown> = {
-                  nickname: profile.nickname ?? profile.userId,
-                }
-                if (profile.avatarurl) payload.avatarurl = profile.avatarurl
-                await typedClient.updateUserInfo(payload)
-              } catch {
+      for (const id of missing) {
+        syncedRef.current.add(id)
+        if (cancelledRef.current) break
+        const profile = profiles[id]
+        const previous = (appUsersInfo[id] as Record<string, unknown> | undefined) ?? {}
+        const next: Record<string, unknown> = {
+          ...previous,
+          userId: id,
+        }
+
+        const nickname =
+          typeof profile?.nickname === "string" ? profile.nickname.trim() : ""
+        const backendNickname =
+          typeof backendNicknames[id] === "string" ? backendNicknames[id].trim() : ""
+        if (backendNickname) next.nickname = backendNickname
+        else if (nickname) next.nickname = nickname
+        else if (typeof previous.nickname !== "string" || !String(previous.nickname).trim()) {
+          next.nickname = id
+        }
+
+        const previousAvatar =
+          typeof previous.avatarurl === "string" ? previous.avatarurl.trim() : ""
+        const avatarurl =
+          typeof profile?.avatarurl === "string" ? profile.avatarurl.trim() : ""
+        if (avatarurl) next.avatarurl = avatarurl
+        else if (!previousAvatar) next.avatarurl = getFallbackAvatarUrl(id)
+
+        const ext = typeof profile?.ext === "string" ? profile.ext.trim() : ""
+        if (ext) next.ext = ext
+        if (profile?.extJson) next.extJson = profile.extJson
+
+        patch[id] = next
+
+        if (!updatedSelfRef.current && selfId && selfId === id) {
+          updatedSelfRef.current = true
+          if (typedClient.updateUserInfo) {
+            try {
+              const payload: Record<string, unknown> = {
+                nickname: (nickname || id) as string,
               }
+              if (avatarurl) payload.avatarurl = avatarurl
+              await typedClient.updateUserInfo(payload)
+            } catch {
             }
           }
-        })
-      )
+        }
+      }
 
-      if (!cancelledRef.current) mergeAppUserInfo(patch)
+      if (!cancelledRef.current) {
+        debug("merge", {
+          patchCount: Object.keys(patch).length,
+          sample: Object.keys(patch)
+            .slice(0, 10)
+            .map((userId) => {
+              const info = patch[userId]
+              const nickname = typeof info?.nickname === "string" ? info.nickname : ""
+              const avatarurl = typeof info?.avatarurl === "string" ? info.avatarurl : ""
+              const ext = typeof info?.ext === "string" ? info.ext : ""
+              return {
+                userId,
+                nickname,
+                hasAvatarurl: Boolean(avatarurl),
+                avatarPrefix: avatarurl ? avatarurl.slice(0, 80) : "",
+                extLen: ext ? ext.length : 0,
+              }
+            }),
+        })
+        mergeAppUserInfo(patch)
+      }
     }
 
     run()
