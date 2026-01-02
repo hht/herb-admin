@@ -57,6 +57,15 @@ const qtnMainSchema = z.object({
 const consultationSchema = z
   .object({
     consultationId: z.number().nullable().optional(),
+    userAnswerId: z.preprocess(
+      (value) => {
+        if (value === null || typeof value === "undefined") return value
+        if (typeof value === "string") return value
+        if (typeof value === "number" && !Number.isNaN(value)) return String(value)
+        return value
+      },
+      z.string().nullable().optional()
+    ),
     advisorMsg: z.string().nullable().optional(),
     doctorMsg: z.string().nullable().optional(),
     adviceMsg: z.string().nullable().optional(),
@@ -153,7 +162,6 @@ const toRecord = (item: ConsultationListItem): QtnRecord => {
       itemRecord.consultationId
     ),
     answerId: getNumber(
-      consultation.userAnswerId,
       consultation.answerId,
       consultation.consultationId
     ),

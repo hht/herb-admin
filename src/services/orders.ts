@@ -15,7 +15,7 @@ export interface Order {
   price?: number | null
   originalPrice?: number | null
   disease?: string | null
-  userAnswerId?: number | null
+  userAnswerId?: string | null
   userId?: number | null
   userName?: string | null
   status?: number | null
@@ -25,7 +25,7 @@ export interface Order {
 }
 
 export interface OrderCreateInput {
-  userAnswerId: number
+  userAnswerId: string
   packageName: string
   price: number
   contents: OrderContentInput[]
@@ -53,7 +53,15 @@ const orderSchema: z.ZodType<Order> = z.object({
   price: z.number().nullable().optional(),
   originalPrice: z.number().nullable().optional(),
   disease: z.string().nullable().optional(),
-  userAnswerId: z.number().nullable().optional(),
+  userAnswerId: z.preprocess(
+    (value) => {
+      if (value === null || typeof value === "undefined") return value
+      if (typeof value === "string") return value
+      if (typeof value === "number" && !Number.isNaN(value)) return String(value)
+      return value
+    },
+    z.string().nullable().optional()
+  ),
   userId: z.number().nullable().optional(),
   userName: z.string().nullable().optional(),
   status: z.number().nullable().optional(),

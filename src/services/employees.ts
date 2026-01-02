@@ -11,6 +11,8 @@ const employeeSchema = z.object({
   role: z.union([z.string(), z.number()]).nullable().optional(),
   sex: z.string().nullable().optional(),
   status: z.string().nullable().optional(),
+  onlineState: z.number().nullable().optional(),
+  num: z.string().nullable().optional(),
   phonenumber: z.string().nullable().optional(),
   post: z.string().nullable().optional(),
   introduction: z.string().nullable().optional(),

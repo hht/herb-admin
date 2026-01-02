@@ -142,8 +142,6 @@ function getTabRole(value: string) {
 }
 
 const TABLE_SCHEMA: TableFieldSchema<Employee>[] = [
-  { colKey: "userId", title: "员工编号", width: 120 },
-  { colKey: "nickName", title: "员工姓名", width: 160, ellipsis: true },
   {
     colKey: "role",
     title: "员工权限",

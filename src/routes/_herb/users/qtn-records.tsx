@@ -1,16 +1,24 @@
 import dayjs from "dayjs"
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
 import {
   Button,
   Checkbox,
   Drawer,
-  Dialog,
+  Input,
   Loading,
   MessagePlugin,
   DialogPlugin,
   Radio,
   Select,
   Table,
+  Textarea,
 } from "tdesign-react"
 import { ChevronLeftIcon, CloseIcon } from "tdesign-icons-react"
 import { shallow } from "zustand/shallow"
@@ -30,14 +38,24 @@ import {
   DEFAULT_QTN_PAGE,
   useQtnRecordsStore,
 } from "~/stores/qtn-records-store"
+import {
+  buildQuestionSections,
+  buildSeverityLabelMap,
+  formatQuestionAnswer,
+  formatQuestionTitle,
+  getQuestionKey,
+  ImageViewerDialog,
+  TableBlock,
+  TruncatedText,
+  SvgIcon,
+  useScrollTabs,
+} from "~/components/qtn/qtn-detail"
 import qtnUserBusinessSvg from "~/assets/figma/qtn-user-business.svg?raw"
 import qtnInfoSvg from "~/assets/figma/qtn-info.svg?raw"
-import qtnViewSvg from "~/assets/figma/qtn-view.svg?raw"
+import { submitQtnAll, submitQtnAnswer } from "~/services/qtn-submit"
 
 const MAX_COMPARE_COUNT = 3
 const MAX_QTN_PAGE_SIZE = 100
-const TAB_SCROLL_OFFSET = 72
-const TAB_ACTIVE_OFFSET = 88
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "-"
@@ -75,251 +93,18 @@ const getRecordKey = (record: QtnRecord) => {
   return String(raw)
 }
 
-const severityColors: Record<number, string> = {
-  1: "#999999",
-  2: "#2BA471",
-  3: "#E37318",
-  4: "#FF7B15",
-  5: "#FF5F57",
-}
-
-const renderImages = (images: string[], onClick?: () => void) => {
-  if (!images.length) return "-"
-  return (
-    <div className="flex items-center gap-3">
-      {images.slice(0, 3).map((src) => (
-        <button
-          type="button"
-          key={src}
-          className="flex size-[60px] items-center justify-center rounded border border-[#e7e7e7] bg-[#f3f3f3]"
-          onClick={onClick}
-        >
-          <img src={src} alt="" className="size-[52px] object-contain" />
-        </button>
-      ))}
-    </div>
-  )
-}
-
-const TruncatedText = ({
-  value,
-  className,
-}: {
-  value: string
-  className?: string
-}) => {
-  if (!value || value === "-") return <span className={className}>-</span>
-  return (
-    <span title={value} className={className}>
-      {value}
-    </span>
-  )
-}
-
-const SvgIcon = ({
-  svg,
-  className,
-}: {
-  svg: string
-  className?: string
-}) => <span className={className} dangerouslySetInnerHTML={{ __html: svg }} />
-
-const ImageViewerDialog = ({
-  visible,
-  title,
-  images,
-  onClose,
-}: {
-  visible: boolean
-  title: string
-  images: string[]
-  onClose: () => void
-}) => {
-  const [activeIndex, setActiveIndex] = useState(0)
-  const current = images[activeIndex]
-
-  return (
-    <Dialog
-      header={title || "查看图片"}
-      visible={visible}
-      placement="center"
-      closeOnOverlayClick
-      style={{
-        width: "auto",
-        maxWidth: "80vw",
-        maxHeight: "80vh",
-        overflow: "auto",
-      }}
-      onClose={onClose}
-      footer={null}
-    >
-      {current ? (
-        <div className="flex flex-col items-center gap-4">
-          <img
-            src={current}
-            alt=""
-            className="max-h-[calc(80vh-220px)] max-w-full object-contain"
-          />
-          {images.length > 1 ? (
-            <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1">
-              {images.map((src, index) => {
-                const isActive = index === activeIndex
-                return (
-                  <button
-                    key={src}
-                    type="button"
-                    className={`flex size-16 items-center justify-center overflow-hidden rounded border ${
-                      isActive ? "border-brand" : "border-[#e7e7e7]"
-                    } bg-[#f3f3f3]`}
-                    onClick={() => setActiveIndex(index)}
-                  >
-                    <img src={src} alt="" className="size-full object-contain" />
-                  </button>
-                )
-              })}
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
-          暂无图片
-        </div>
-      )}
-    </Dialog>
-  )
-}
-
 const toRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : {}
 
-const normalizeSectionTitle = (value?: string | null) => {
-  if (!value) return ""
-  const trimmed = value.trim()
-  if (!trimmed || trimmed === "选填项") return ""
-  return trimmed
-}
-
-const formatQuestionTitle = (question: QtnQuestion) => {
-  const title = question.title?.trim() ?? ""
-  const unit = question.unit?.trim() ?? ""
-  if (!title) return "-"
-  if (unit && !title.includes(unit)) {
-    return `${title}（${unit}）`
+const normalizeIdString = (value: unknown) => {
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    return trimmed ? trimmed : undefined
   }
-  return title
-}
-
-const getQuestionKey = (question: QtnQuestion) => {
-  if (typeof question.questionId === "number") {
-    return `id:${question.questionId}`
+  if (typeof value === "number" && !Number.isNaN(value)) {
+    return String(value)
   }
-  return `title:${question.title ?? ""}`
-}
-
-const buildSeverityLabelMap = (qtnMain?: unknown) => {
-  const record = toRecord(qtnMain)
-  const raw = record.symptomLevel
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    const entries = Object.entries(raw as Record<string, unknown>)
-    if (entries.length) {
-      return entries.reduce<Record<number, string>>((acc, [key, value]) => {
-        const parsedKey = Number(key)
-        if (Number.isNaN(parsedKey)) return acc
-        if (typeof value === "string" && value.trim()) {
-          acc[parsedKey] = value.trim()
-        }
-        return acc
-      }, {})
-    }
-  }
-  return {
-    1: "感觉正常",
-    2: "偶尔感觉不舒服",
-    3: "感觉严重",
-    4: "感觉很严重",
-    5: "感觉非常严重",
-  }
-}
-
-const buildQuestionSections = (qtnMain?: unknown) => {
-  const record = toRecord(qtnMain)
-  const steps = Array.isArray(record.list) ? record.list : []
-  const sections: Array<{
-    key: string
-    label: string
-    questions: QtnQuestion[]
-  }> = []
-  const buildSections = (
-    list: QtnQuestion[],
-    prefix: string,
-    stepTitle?: string
-  ) => {
-    const sorted = [...list].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
-    const baseTitle = normalizeSectionTitle(stepTitle)
-    let current = {
-      key: baseTitle ? baseTitle : `${prefix}-0`,
-      label: baseTitle,
-      questions: [] as QtnQuestion[],
-    }
-    let index = 1
-    sorted.forEach((question) => {
-      if (question.type === 10) {
-        if (current.questions.length) {
-          sections.push(current)
-        }
-        const nextTitle = normalizeSectionTitle(question.title ?? "")
-        const keyBase = baseTitle ? `${baseTitle}-${nextTitle}` : nextTitle
-        current = {
-          key: keyBase || `${prefix}-${index}`,
-          label: nextTitle,
-          questions: [],
-        }
-        index += 1
-        return
-      }
-      current.questions.push(question)
-    })
-    if (current.questions.length) {
-      sections.push(current)
-    }
-  }
-  if (steps.length) {
-    steps.forEach((step, stepIndex) => {
-      const stepRecord = toRecord(step)
-      const stepQuestions =
-        (Array.isArray(stepRecord.questions) &&
-          (stepRecord.questions as QtnQuestion[])) ||
-        (Array.isArray(stepRecord.questionList) &&
-          (stepRecord.questionList as QtnQuestion[])) ||
-        (Array.isArray(stepRecord.answerList) &&
-          (stepRecord.answerList as QtnQuestion[])) ||
-        (Array.isArray(stepRecord.answers) &&
-          (stepRecord.answers as QtnQuestion[])) ||
-        (Array.isArray(stepRecord.answerVOList) &&
-          (stepRecord.answerVOList as QtnQuestion[])) ||
-        (Array.isArray(stepRecord.qtnAnswerList) &&
-          (stepRecord.qtnAnswerList as QtnQuestion[])) ||
-        (Array.isArray(stepRecord.qtnAnswerVOS) &&
-          (stepRecord.qtnAnswerVOS as QtnQuestion[])) ||
-        []
-      if (!stepQuestions.length) return
-      buildSections(stepQuestions, `step-${stepIndex}`, stepRecord.title as string)
-    })
-    return sections
-  }
-  const list =
-    record.questions ??
-    record.questionList ??
-    record.answerList ??
-    record.answers ??
-    record.answerVos ??
-    record.answerVOList ??
-    record.qtnAnswerList ??
-    record.qtnAnswerVOS
-  if (Array.isArray(list) && list.length) {
-    buildSections(list as QtnQuestion[], "default")
-  }
-  return sections
+  return undefined
 }
 
 const resolveMainFromDetail = (detail?: ConsultationDetail | null) => {
@@ -339,82 +124,6 @@ const resolveMainFromDetail = (detail?: ConsultationDetail | null) => {
   return candidates.find((item) => item && typeof item === "object")
 }
 
-const normalizeAnswer = (value?: string | null) => {
-  if (!value) return "-"
-  const trimmed = String(value).trim()
-  if (!trimmed) return "-"
-  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
-    try {
-      const parsed = JSON.parse(trimmed) as unknown
-      if (Array.isArray(parsed)) {
-        return parsed.filter(Boolean).join("、") || "-"
-      }
-      if (typeof parsed === "object" && parsed) {
-        return JSON.stringify(parsed)
-      }
-    } catch {
-      return trimmed
-    }
-  }
-  return trimmed
-}
-
-const parseAnswerImages = (answer?: string | null) => {
-  if (!answer) return []
-  const trimmed = String(answer).trim()
-  if (!trimmed) return []
-  if (trimmed.startsWith("[")) {
-    try {
-      const parsed = JSON.parse(trimmed) as string[]
-      return Array.isArray(parsed) ? parsed.filter(Boolean) : []
-    } catch {
-      return []
-    }
-  }
-  if (trimmed.includes("|")) {
-    return trimmed
-      .split("|")
-      .map((item) => item.trim())
-      .filter(Boolean)
-  }
-  if (trimmed.includes(",")) {
-    return trimmed
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean)
-  }
-  return [trimmed]
-}
-
-const parseRichAnswer = (value: string) => {
-  const trimmed = value.trim()
-  if (!trimmed.startsWith("{")) return null
-  try {
-    const parsed = JSON.parse(trimmed) as Record<string, unknown>
-    const text =
-      typeof parsed.text === "string"
-        ? parsed.text
-        : typeof parsed.content === "string"
-          ? parsed.content
-          : typeof parsed.desc === "string"
-            ? parsed.desc
-            : undefined
-    const images =
-      (Array.isArray(parsed.images) && parsed.images) ||
-      (Array.isArray(parsed.imgs) && parsed.imgs) ||
-      (Array.isArray(parsed.files) && parsed.files) ||
-      (Array.isArray(parsed.fileList) && parsed.fileList) ||
-      (Array.isArray(parsed.imagesList) && parsed.imagesList) ||
-      []
-    return {
-      text,
-      images: images.filter((item) => typeof item === "string"),
-    }
-  } catch {
-    return null
-  }
-}
-
 const parseTipsOptions = (tips?: string | null) => {
   if (!tips) return []
   return tips
@@ -428,25 +137,230 @@ const parseTipsOptions = (tips?: string | null) => {
     .filter(Boolean) as Array<{ key: string; label: string }>
 }
 
-const getTipLabel = (tips: string | null | undefined, value: string) => {
-  if (!tips) return undefined
-  const options = parseTipsOptions(tips)
-  const matched = options.find((item) => item.key === value)
-  return matched?.label
+const buildSelectOptions = (question: QtnQuestion) => {
+  if (question.options?.length) {
+    return question.options
+      .filter((item) => item.optionId !== null && item.optionId !== undefined)
+      .map((item) => ({
+        label: item.option ?? String(item.optionId),
+        value: String(item.optionId),
+      }))
+  }
+  const options = parseTipsOptions(question.tips1)
+  if (options.length) {
+    return options.map((item) => ({ label: item.label, value: item.key }))
+  }
+  return []
 }
 
-const getOptionLabel = (question: QtnQuestion, value: string) => {
-  const optionById = question.options?.find(
-    (option) => String(option.optionId) === value
-  )
-  const optionByLabel = question.options?.find(
-    (option) => option.option === value
-  )
+const normalizeInputValue = (value: unknown) => {
+  if (value === null || value === undefined) return ""
+  const text = String(value)
+  return text === "-" ? "" : text
+}
+
+const normalizeDraftValueForQuestion = (
+  question: QtnQuestion,
+  raw: unknown
+) => {
+  const value = normalizeInputValue(raw)
+  if (!value) return ""
+  const type = question.type ?? 0
+  if (type === 1) {
+    if (value === "是") return "1"
+    if (value === "否") return "0"
+    return value
+  }
+  if (type === 4 || type === 9) {
+    const optionById = question.options?.find(
+      (option) => String(option.optionId) === value
+    )
+    if (optionById?.optionId !== null && optionById?.optionId !== undefined) {
+      return String(optionById.optionId)
+    }
+    const optionByLabel = question.options?.find(
+      (option) => option.option === value
+    )
+    if (
+      optionByLabel?.optionId !== null &&
+      optionByLabel?.optionId !== undefined
+    ) {
+      return String(optionByLabel.optionId)
+    }
+    const tipsOptions = parseTipsOptions(question.tips1)
+    const tipByKey = tipsOptions.find((item) => item.key === value)
+    if (tipByKey) return tipByKey.key
+    const tipByLabel = tipsOptions.find((item) => item.label === value)
+    if (tipByLabel) return tipByLabel.key
+  }
+  return value
+}
+
+const QuestionEditor = ({
+  question,
+  value,
+  onChange,
+}: {
+  question: QtnQuestion
+  value: string
+  onChange: (next: string) => void
+}) => {
+  const type = question.type ?? 0
+  const selectOptions = buildSelectOptions(question)
+
+  if (type === 1) {
+    return (
+      <Radio.Group
+        value={value}
+        onChange={(next) => onChange(String(next))}
+        options={[
+          { label: "是", value: "1" },
+          { label: "否", value: "0" },
+        ]}
+      />
+    )
+  }
+
+  if (type === 9 || type === 4) {
+    if (!selectOptions.length) {
+      return (
+        <Input
+          value={value}
+          onChange={(next) => onChange(String(next))}
+          placeholder="请输入"
+        />
+      )
+    }
+    return (
+      <Radio.Group
+        value={value}
+        onChange={(next) => onChange(String(next))}
+        options={selectOptions}
+      />
+    )
+  }
+
+  if (type === 5) {
+    if (!selectOptions.length) {
+      return (
+        <Input
+          value={value}
+          onChange={(next) => onChange(String(next))}
+          placeholder="请输入"
+        />
+      )
+    }
+    const selected = decodeAnswer(value).map((item) => item.optionId)
+    return (
+      <Checkbox.Group
+        value={selected}
+        options={selectOptions.map((item) => ({
+          label: item.label,
+          value: item.value,
+        }))}
+        onChange={(next) =>
+          onChange(
+            (next as Array<string | number | boolean>)
+              .map((item) => String(item))
+              .filter(Boolean)
+              .join("|")
+          )
+        }
+      />
+    )
+  }
+
+  if (type === 6) {
+    if (!selectOptions.length) {
+      return (
+        <Input
+          value={value}
+          onChange={(next) => onChange(String(next))}
+          placeholder="请输入"
+        />
+      )
+    }
+    const parsed = decodeAnswer(value)
+    const map = new Map<string, string | undefined>()
+    parsed.forEach((item) => {
+      map.set(item.optionId, item.ext)
+    })
+    const toggle = (optionId: string, checked: boolean) => {
+      const nextMap = new Map(map)
+      if (checked) {
+        nextMap.set(optionId, nextMap.get(optionId) ?? "1")
+      } else {
+        nextMap.delete(optionId)
+      }
+      const nextValue = Array.from(nextMap.entries())
+        .map(([id, ext]) => (ext ? `${id}:${ext}` : id))
+        .join("|")
+      onChange(nextValue)
+    }
+    const setLevel = (optionId: string, level: string) => {
+      const nextMap = new Map(map)
+      nextMap.set(optionId, level)
+      const nextValue = Array.from(nextMap.entries())
+        .map(([id, ext]) => (ext ? `${id}:${ext}` : id))
+        .join("|")
+      onChange(nextValue)
+    }
+    return (
+      <div className="space-y-2">
+        {selectOptions.map((option) => {
+          const checked = map.has(option.value)
+          const currentLevel = map.get(option.value) ?? "1"
+          return (
+            <div key={option.value} className="flex items-center gap-3">
+              <Checkbox
+                checked={checked}
+                onChange={(next) => toggle(option.value, Boolean(next))}
+              >
+                {option.label}
+              </Checkbox>
+              {checked ? (
+                <Select
+                  value={currentLevel}
+                  className="w-[120px]"
+                  options={[1, 2, 3, 4, 5].map((item) => ({
+                    label: `程度${item}`,
+                    value: String(item),
+                  }))}
+                  onChange={(next) => setLevel(option.value, String(next))}
+                />
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  if (type === 11) {
+    return (
+      <Textarea
+        value={value}
+        onChange={(next) => onChange(String(next))}
+        placeholder="请输入"
+        autosize={{ minRows: 3, maxRows: 6 }}
+      />
+    )
+  }
+
+  if (type === 7 || type === 8) {
+    return (
+      <span className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+        图片类内容暂不支持编辑
+      </span>
+    )
+  }
+
   return (
-    optionById?.option ??
-    optionByLabel?.option ??
-    getTipLabel(question.tips1, value) ??
-    value
+    <Input
+      value={value}
+      onChange={(next) => onChange(String(next))}
+      placeholder="请输入"
+    />
   )
 }
 
@@ -494,221 +408,7 @@ const decodeAnswer = (value: string) => {
     })
 }
 
-const renderTag = (label: string) => (
-  <span className="inline-flex items-center rounded-[3px] border border-[#e7e7e7] bg-[#f3f3f3] px-2 py-0.5 text-[12px] leading-[20px] text-[rgba(0,0,0,0.6)]">
-    {label}
-  </span>
-)
-
-const renderSeverityTag = (
-  label: string,
-  level?: number,
-  severityLabelMap?: Record<number, string>
-) => {
-  if (!level) return renderTag(label)
-  const color = severityColors[level] ?? severityColors[1]
-  const severityText = severityLabelMap?.[level]
-  const text = severityText ? `${label} - ${severityText}` : label
-  return (
-    <span
-      className="inline-flex items-center rounded-[3px] px-2 py-[2px] text-[12px] leading-[20px] text-white/90"
-      style={{ backgroundColor: color }}
-    >
-      {text}
-    </span>
-  )
-}
-
-const formatQuestionAnswer = (
-  question?: QtnQuestion,
-  options?: {
-    severityLabelMap?: Record<number, string>
-    onOpenImages?: (payload: { title: string; images: string[] }) => void
-  }
-) => {
-  if (!question) return "-"
-  const rawAnswer = question.userAnswer ?? question.answer ?? question.other ?? ""
-  const answer = String(rawAnswer ?? "")
-  if (question.type === 1) {
-    const normalized = normalizeAnswer(answer)
-    return answer === "1" ? "是" : answer === "0" ? "否" : normalized
-  }
-  if (question.type === 9 || question.type === 3) {
-    const label = getOptionLabel(question, answer)
-    return label || normalizeAnswer(answer)
-  }
-  if (question.type === 4) {
-    const label = getOptionLabel(question, answer)
-    return label || normalizeAnswer(answer)
-  }
-  if (question.type === 5 || question.type === 6) {
-    const selected = decodeAnswer(answer)
-    if (!selected.length) return "-"
-    if (question.type === 5) {
-      const labels = selected.map((item) =>
-        getOptionLabel(question, item.optionId)
-      )
-      return labels.join("、") || "-"
-    }
-    return (
-      <div className="flex flex-col gap-2">
-        {selected.map((item) => {
-          const level = item.ext ? Number(item.ext) : undefined
-          return (
-            <div key={`${item.optionId}-${item.ext ?? ""}`}>
-              {renderSeverityTag(
-                getOptionLabel(question, item.optionId),
-                Number.isNaN(level) ? undefined : level,
-                options?.severityLabelMap
-              )}
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-  if (question.type === 7 || question.type === 8) {
-    const rich = question.type === 7 ? parseRichAnswer(answer) : null
-    const images = rich?.images?.length ? rich.images : parseAnswerImages(answer)
-    if (!images.length && !rich?.text) {
-      return question.type === 7 ? normalizeAnswer(answer) : "-"
-    }
-    const handleOpenImages = () => {
-      if (!images.length) return
-      options?.onOpenImages?.({ title: formatQuestionTitle(question), images })
-    }
-    if (question.type === 7) {
-      if (!images.length) {
-        return rich?.text ?? normalizeAnswer(answer)
-      }
-      if (rich?.text) {
-        return (
-          <div className="space-y-1">
-            <div className="whitespace-pre-wrap">{rich.text}</div>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 text-[14px] leading-[22px] text-[#267347]"
-              onClick={handleOpenImages}
-            >
-              <SvgIcon svg={qtnViewSvg} className="inline-flex size-4" />
-              查看图片
-            </button>
-          </div>
-        )
-      }
-      return (
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 text-[14px] leading-[22px] text-[#267347]"
-          onClick={handleOpenImages}
-        >
-          <SvgIcon svg={qtnViewSvg} className="inline-flex size-4" />
-          查看图片
-        </button>
-      )
-    }
-    return renderImages(images, handleOpenImages)
-  }
-  const normalized = normalizeAnswer(answer)
-  const display = renderMetricValue(normalized)
-  return display
-}
-
-const metricTags = ["偏高", "偏低", "异常", "偏多", "偏少", "偏大", "偏小"]
-
-const splitMetricValue = (value: string) => {
-  const trimmed = value.trim()
-  if (!trimmed || trimmed === "-") return { text: "-", tag: "" }
-  const tag = metricTags.find((item) => trimmed.includes(item)) ?? ""
-  if (!tag) return { text: trimmed, tag: "" }
-  const text = trimmed
-    .replace(tag, "")
-    .replace(/[()（）]/g, "")
-    .replace(/[:：|]/g, " ")
-    .trim()
-  return { text: text || "-", tag }
-}
-
-const renderMetricValue = (value: string) => {
-  if (!value || value === "-") return "-"
-  const { text, tag } = splitMetricValue(value)
-  if (!tag) return text
-  return (
-    <span className="flex items-center gap-2">
-      <span>{text}</span>
-      <span className="inline-flex items-center rounded-[3px] bg-[#d54941] px-2 text-[12px] leading-[20px] text-white">
-        {tag}
-      </span>
-    </span>
-  )
-}
-
-const TableBlock = ({
-  headers,
-  rows,
-  rowHeaders,
-}: {
-  headers: string[]
-  rows: Array<Array<ReactNode>>
-  rowHeaders?: ReactNode[]
-}) => {
-  return (
-    <div className="overflow-hidden rounded border border-[#e7e7e7]">
-      <table className="w-full table-fixed text-[14px] leading-[22px]">
-        <thead>
-          <tr className="bg-[#f3f3f3] text-[rgba(0,0,0,0.4)]">
-            {rowHeaders ? <th className="w-[180px] px-4 py-2" /> : null}
-            {headers.map((header, index) => {
-              const needsBorder = rowHeaders || index > 0
-              return (
-                <th
-                  key={`${header}-${index}`}
-                  className={`px-4 py-2 text-left font-normal ${
-                    needsBorder ? "border-l border-[#e7e7e7]" : ""
-                  }`}
-                >
-                  {header}
-                </th>
-              )
-            })}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr key={rowIndex} className="border-t border-[#e7e7e7]">
-              {rowHeaders ? (
-                <td className="bg-[#f3f3f3] px-4 py-2 text-[rgba(0,0,0,0.4)]">
-                  {rowHeaders[rowIndex]}
-                </td>
-              ) : null}
-              {row.map((cell, cellIndex) => {
-                const needsBorder = rowHeaders || cellIndex > 0
-                return (
-                  <td
-                    key={cellIndex}
-                    className={`min-h-[60px] px-4 py-2 align-top text-[rgba(0,0,0,0.9)] ${
-                      needsBorder ? "border-l border-[#e7e7e7]" : ""
-                    }`}
-                  >
-                    {cell}
-                  </td>
-                )
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-const DiagnosisField = ({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) => {
+const DiagnosisField = ({ label, value }: { label: string; value: string }) => {
   const content = value || "-"
   const textColor =
     value && value.trim() ? "text-[#1a1a1a]" : "text-[rgba(0,0,0,0.4)]"
@@ -726,80 +426,18 @@ const DiagnosisField = ({
   )
 }
 
-const useScrollTabs = (tabs: Array<{ key: string; label: string }>) => {
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  const [activeKey, setActiveKey] = useState(tabs[0]?.key ?? "")
-  const activeRef = useRef(activeKey)
-
-  useEffect(() => {
-    activeRef.current = activeKey
-  }, [activeKey])
-
-  const setSectionRef = useCallback(
-    (key: string) => (node: HTMLDivElement | null) => {
-      sectionRefs.current[key] = node
-    },
-    []
-  )
-
-  const scrollTo = useCallback((key: string) => {
-    const container = containerRef.current
-    const target = sectionRefs.current[key]
-    if (!container || !target) return
-    const containerTop = container.getBoundingClientRect().top
-    const targetTop = target.getBoundingClientRect().top - containerTop
-    const nextTop = Math.max(
-      container.scrollTop + targetTop - TAB_SCROLL_OFFSET,
-      0
-    )
-    container.scrollTo({ top: nextTop, behavior: "smooth" })
-  }, [])
-
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-    let raf = 0
-    const update = () => {
-      const containerTop = container.getBoundingClientRect().top
-      let current = tabs[0]?.key ?? ""
-      tabs.forEach((tab) => {
-        const node = sectionRefs.current[tab.key]
-        if (!node) return
-        const top = node.getBoundingClientRect().top - containerTop
-        if (top <= TAB_ACTIVE_OFFSET) {
-          current = tab.key
-        }
-      })
-      if (current && current !== activeRef.current) {
-        setActiveKey(current)
-      }
-    }
-    const onScroll = () => {
-      if (raf) cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(update)
-    }
-    container.addEventListener("scroll", onScroll)
-    update()
-    return () => {
-      if (raf) cancelAnimationFrame(raf)
-      container.removeEventListener("scroll", onScroll)
-    }
-  }, [tabs])
-
-  return { containerRef, setSectionRef, activeKey, scrollTo }
-}
-
 const DetailView = ({
   record,
   detail,
   userName,
+  onDetailChange,
   onBack,
   onClose,
 }: {
   record: QtnRecord
   detail: ConsultationDetail | null
   userName: string
+  onDetailChange: (next: ConsultationDetail) => void
   onBack: () => void
   onClose: () => void
 }) => {
@@ -807,11 +445,9 @@ const DetailView = ({
     visible: boolean
     title: string
     images: string[]
-  }>({ visible: false, title: "", images: [] })
-  const qtnMain = useMemo(
-    () => resolveMainFromDetail(detail),
-    [detail]
-  )
+    initialIndex: number
+  }>({ visible: false, title: "", images: [], initialIndex: 0 })
+  const qtnMain = useMemo(() => resolveMainFromDetail(detail), [detail])
   const snapshot = buildSnapshot(qtnMain as QtnMain, detail?.consultation)
   const questionSections = useMemo(
     () => buildQuestionSections(qtnMain),
@@ -876,11 +512,138 @@ const DetailView = ({
     ],
     []
   )
-  const { containerRef, setSectionRef, activeKey, scrollTo } = useScrollTabs(tabs)
-  const openImages = useCallback((payload: { title: string; images: string[] }) => {
-    if (!payload.images.length) return
-    setImageViewer({ visible: true, title: payload.title, images: payload.images })
-  }, [])
+  const { containerRef, setSectionRef, activeKey, scrollTo } =
+    useScrollTabs(tabs)
+  const openImages = useCallback(
+    (payload: { title: string; images: string[]; initialIndex?: number }) => {
+      if (!payload.images.length) return
+      setImageViewer({
+        visible: true,
+        title: payload.title,
+        images: payload.images,
+        initialIndex: payload.initialIndex ?? 0,
+      })
+    },
+    []
+  )
+
+  const [isEditing, setIsEditing] = useState(false)
+  const [draftAnswers, setDraftAnswers] = useState<Record<string, string>>({})
+  const draftRef = useRef<Record<string, string>>({})
+  useEffect(() => {
+    draftRef.current = draftAnswers
+  }, [draftAnswers])
+
+  const { runAsync: runSubmitAll, loading: savingAll } = useRequest(
+    submitQtnAll,
+    {
+      manual: true,
+    }
+  )
+  const { runAsync: runSubmitOne, loading: savingOne } = useRequest(
+    submitQtnAnswer,
+    { manual: true }
+  )
+  const isSaving = savingAll || savingOne
+
+  const startEdit = () => {
+    const initial: Record<string, string> = {}
+    questionSections.forEach((section) => {
+      section.questions.forEach((question) => {
+        const key = getQuestionKey(question)
+        const raw =
+          question.userAnswer ?? question.answer ?? question.other ?? ""
+        initial[key] = normalizeDraftValueForQuestion(question, raw)
+      })
+    })
+    setDraftAnswers(initial)
+    setIsEditing(true)
+  }
+
+  const cancelEdit = () => {
+    setIsEditing(false)
+    setDraftAnswers({})
+  }
+
+  const saveEdit = async () => {
+    if (!record.consultationId) {
+      MessagePlugin.error("缺少问诊记录ID")
+      return
+    }
+    const mainRecord = toRecord(qtnMain)
+    const batchNo =
+      typeof mainRecord.batchNo === "string" ? mainRecord.batchNo : undefined
+    const consultationRecord = toRecord(detail?.consultation)
+    const userAnswerId = normalizeIdString(consultationRecord.userAnswerId)
+
+    const changes: Array<{ question: QtnQuestion; next: string }> = []
+    questionSections.forEach((section) => {
+      section.questions.forEach((question) => {
+        const key = getQuestionKey(question)
+        const next = draftRef.current[key] ?? ""
+        const original = normalizeInputValue(
+          question.userAnswer ?? question.answer ?? question.other ?? ""
+        )
+        if (next !== original) {
+          changes.push({ question, next })
+        }
+      })
+    })
+
+    if (!changes.length) {
+      MessagePlugin.info("未检测到修改")
+      cancelEdit()
+      return
+    }
+
+    const answers = changes
+      .map(({ question, next }) => {
+        if (!question.questionId) return null
+        const questionId = Number(question.questionId)
+        if (Number.isNaN(questionId)) return null
+        const mainId =
+          typeof question.mainId === "number" ? question.mainId : undefined
+        return {
+          questionId,
+          mainId,
+          answer: next,
+          userAnswer: next,
+          other: question.other ?? undefined,
+          profileField: question.profileField ?? undefined,
+          type: question.type ?? undefined,
+          sort: question.sort ?? undefined,
+          required: question.required ?? undefined,
+          batchNo,
+          userAnswerId,
+        }
+      })
+      .filter(Boolean) as Array<Record<string, unknown>>
+
+    try {
+      await runSubmitAll({
+        batchNo,
+        userAnswerId,
+        answers,
+      } as Record<string, unknown>)
+    } catch (error) {
+      console.log("submitAll failed, fallback submit one by one:", error)
+      const results = await Promise.allSettled(
+        answers.map((payload) =>
+          runSubmitOne(payload as Record<string, unknown>)
+        )
+      )
+      const failed = results.filter((item) => item.status === "rejected")
+      if (failed.length) {
+        MessagePlugin.error("问卷保存失败，请稍后重试")
+        return
+      }
+    }
+
+    MessagePlugin.success("问卷已保存")
+    cancelEdit()
+    const refreshed = await getConsultationDetailById(record.consultationId)
+    onDetailChange(refreshed)
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -1018,13 +781,48 @@ const DetailView = ({
         </div>
 
         <div ref={setSectionRef("questionnaire")} className="mt-6 space-y-5">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecf9f1]">
-              <SvgIcon svg={qtnUserBusinessSvg} className="inline-flex size-4" />
-            </span>
-            <span className="text-[20px] leading-[28px] text-[rgba(0,0,0,0.9)]">
-              患者问卷
-            </span>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecf9f1]">
+                <SvgIcon
+                  svg={qtnUserBusinessSvg}
+                  className="inline-flex size-4"
+                />
+              </span>
+              <span className="text-[20px] leading-[28px] text-[rgba(0,0,0,0.9)]">
+                患者问卷
+              </span>
+            </div>
+            {questionSections.length ? (
+              isEditing ? (
+                <div className="flex items-center gap-2">
+                  <Button
+                    theme="primary"
+                    loading={isSaving}
+                    onClick={saveEdit}
+                    className="!h-8 !rounded-[3px] !px-4 !text-[14px] !leading-[22px]"
+                  >
+                    保存
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={isSaving}
+                    onClick={cancelEdit}
+                    className="!h-8 !rounded-[3px] !px-4 !text-[14px] !leading-[22px]"
+                  >
+                    取消
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={startEdit}
+                  className="!h-8 !rounded-[3px] !px-4 !text-[14px] !leading-[22px]"
+                >
+                  编辑问卷
+                </Button>
+              )
+            ) : null}
           </div>
           {questionSections.length ? (
             questionSections.map((section) => {
@@ -1032,9 +830,24 @@ const DetailView = ({
               const headers = section.questions.map((question) =>
                 formatQuestionTitle(question)
               )
-              const row = section.questions.map((question) =>
-                formatQuestionAnswer(question, { severityLabelMap, onOpenImages: openImages })
-              )
+              const row = section.questions.map((question) => {
+                if (!isEditing) {
+                  return formatQuestionAnswer(question, {
+                    severityLabelMap,
+                    onOpenImages: openImages,
+                  })
+                }
+                const key = getQuestionKey(question)
+                return (
+                  <QuestionEditor
+                    question={question}
+                    value={draftAnswers[key] ?? ""}
+                    onChange={(next) =>
+                      setDraftAnswers((prev) => ({ ...prev, [key]: next }))
+                    }
+                  />
+                )
+              })
               return (
                 <TableBlock
                   key={`${section.key}-${headers.length}`}
@@ -1058,7 +871,10 @@ const DetailView = ({
             诊断报告
           </div>
           <div className="space-y-6">
-            <DiagnosisField label="健康顾问备注" value={snapshot.diagnosis[0]} />
+            <DiagnosisField
+              label="健康顾问备注"
+              value={snapshot.diagnosis[0]}
+            />
             <DiagnosisField label="医生诊断" value={snapshot.diagnosis[1]} />
             <DiagnosisField label="治疗建议" value={snapshot.diagnosis[2]} />
           </div>
@@ -1069,8 +885,14 @@ const DetailView = ({
         visible={imageViewer.visible}
         title={imageViewer.title}
         images={imageViewer.images}
+        initialIndex={imageViewer.initialIndex}
         onClose={() =>
-          setImageViewer((prev) => ({ ...prev, visible: false, images: [] }))
+          setImageViewer((prev) => ({
+            ...prev,
+            visible: false,
+            images: [],
+            initialIndex: 0,
+          }))
         }
       />
     </div>
@@ -1094,7 +916,8 @@ const CompareView = ({
     visible: boolean
     title: string
     images: string[]
-  }>({ visible: false, title: "", images: [] })
+    initialIndex: number
+  }>({ visible: false, title: "", images: [], initialIndex: 0 })
   const mains = useMemo(
     () => details.map((detail) => resolveMainFromDetail(detail)),
     [details]
@@ -1110,7 +933,12 @@ const CompareView = ({
     const order: string[] = []
     const map = new Map<
       string,
-      { key: string; label: string; questions: QtnQuestion[]; keys: Set<string> }
+      {
+        key: string
+        label: string
+        questions: QtnQuestion[]
+        keys: Set<string>
+      }
     >()
     sectionList.forEach((sections) => {
       sections.forEach((section) => {
@@ -1157,10 +985,18 @@ const CompareView = ({
     () => mains.map((main) => buildSeverityLabelMap(main)),
     [mains]
   )
-  const openImages = useCallback((payload: { title: string; images: string[] }) => {
-    if (!payload.images.length) return
-    setImageViewer({ visible: true, title: payload.title, images: payload.images })
-  }, [])
+  const openImages = useCallback(
+    (payload: { title: string; images: string[]; initialIndex?: number }) => {
+      if (!payload.images.length) return
+      setImageViewer({
+        visible: true,
+        title: payload.title,
+        images: payload.images,
+        initialIndex: payload.initialIndex ?? 0,
+      })
+    },
+    []
+  )
   const rowHeaders = records.map((record) => (
     <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
       <TruncatedText
@@ -1206,10 +1042,13 @@ const CompareView = ({
                 const questionMap = questionMaps[detailIndex]?.get(section.key)
                 const severityLabelMap = severityLabelMaps[detailIndex]
                 return section.questions.map((question) =>
-                  formatQuestionAnswer(questionMap?.get(getQuestionKey(question)), {
-                    severityLabelMap,
-                    onOpenImages: openImages,
-                  })
+                  formatQuestionAnswer(
+                    questionMap?.get(getQuestionKey(question)),
+                    {
+                      severityLabelMap,
+                      onOpenImages: openImages,
+                    }
+                  )
                 )
               })
               return (
@@ -1250,8 +1089,14 @@ const CompareView = ({
         visible={imageViewer.visible}
         title={imageViewer.title}
         images={imageViewer.images}
+        initialIndex={imageViewer.initialIndex}
         onClose={() =>
-          setImageViewer((prev) => ({ ...prev, visible: false, images: [] }))
+          setImageViewer((prev) => ({
+            ...prev,
+            visible: false,
+            images: [],
+            initialIndex: 0,
+          }))
         }
       />
     </div>
@@ -1319,10 +1164,11 @@ export const QtnRecordsDrawer = ({
       refreshDeps: [userId, JSON.stringify(page)],
     }
   )
-  const { runAsync: runConsultationDetail, loading: detailLoading } = useRequest(
-    (consultationId: number) => getConsultationDetailById(consultationId),
-    { manual: true }
-  )
+  const { runAsync: runConsultationDetail, loading: detailLoading } =
+    useRequest(
+      (consultationId: number) => getConsultationDetailById(consultationId),
+      { manual: true }
+    )
 
   const records = useMemo(() => data?.record ?? [], [data])
   const symptomOptions = useMemo(() => {
@@ -1461,11 +1307,13 @@ export const QtnRecordsDrawer = ({
             colKey: "select",
             title: "对比",
             width: 120,
+            fixed: "right",
             cell: ({ row }: { row: QtnRecord }) => (
               <Checkbox
                 checked={selected.some(
                   (item) => getRecordKey(item) === getRecordKey(row)
                 )}
+                disabled={Boolean(selected[0]?.name) && row.name !== selected[0]?.name}
                 onChange={(checked) => toggleSelect(row, checked)}
               />
             ),
@@ -1477,6 +1325,7 @@ export const QtnRecordsDrawer = ({
             colKey: "actions",
             title: "操作",
             width: 140,
+            fixed: "right",
             cell: ({ row }: { row: QtnRecord }) => (
               <div className="flex items-center gap-3">
                 <Button
@@ -1499,7 +1348,7 @@ export const QtnRecordsDrawer = ({
         ]
 
   const listView = (
-    <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+    <div className="flex-1 min-h-0 overflow-y-auto px-12 py-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <Radio.Group
           theme="button"
@@ -1529,40 +1378,17 @@ export const QtnRecordsDrawer = ({
       </div>
 
       <div className="mt-6">
-        <Table
-          columns={
-            mode === "compare"
-              ? [
-                  ...baseColumns,
-                  {
-                    colKey: "select",
-                    title: "对比",
-                    width: 120,
-                    cell: ({ row }: { row: QtnRecord }) => {
-                      const lockedName = selected[0]?.name
-                      const isLocked =
-                        Boolean(lockedName) && row.name !== lockedName
-                      const isChecked = selected.some(
-                        (item) => getRecordKey(item) === getRecordKey(row)
-                      )
-                      return (
-                        <Checkbox
-                          checked={isChecked}
-                          disabled={isLocked}
-                          onChange={(checked) => toggleSelect(row, checked)}
-                        />
-                      )
-                    },
-                  },
-                ]
-              : tableColumns
-          }
-          tableLayout="fixed"
-          data={filteredRecords}
-          rowKey="batchNo"
-          loading={loading}
-          empty="暂无问诊记录"
-        />
+        <div className="overflow-x-auto">
+          <Table
+            columns={tableColumns}
+            tableLayout="fixed"
+            className="w-full min-w-full"
+            data={filteredRecords}
+            rowKey="batchNo"
+            loading={loading}
+            empty="暂无问诊记录"
+          />
+        </div>
       </div>
     </div>
   )
@@ -1602,14 +1428,13 @@ export const QtnRecordsDrawer = ({
       }
     >
       <Loading loading={detailLoading} className="h-full">
-        {view === "list" ? (
-          listView
-        ) : null}
+        {view === "list" ? listView : null}
         {view === "detail" && activeRecord ? (
           <DetailView
             record={activeRecord}
             detail={detailData}
             userName={userName ?? "用户"}
+            onDetailChange={(next) => setState({ detailData: next })}
             onBack={() => setState({ view: "list" })}
             onClose={handleClose}
           />

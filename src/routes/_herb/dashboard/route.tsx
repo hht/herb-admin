@@ -12,6 +12,10 @@ import {
 } from "easemob-chat-uikit"
 import { useEffect, useMemo, useState } from "react"
 import { ChatSidebar, type SidebarTab } from "~/components/chat-sidebar"
+import {
+  OrderCustomMessage,
+  isOrderCustomMessage,
+} from "~/components/chat/order-custom-message"
 import { cn } from "~/libs/utils"
 import { useOrderStore } from "~/stores/order-store"
 
@@ -86,6 +90,15 @@ const ChatWorkspace = () => {
     }: MessageRenderContext) => {
       if (message.type !== "custom") return null
       const baseMessage = message as NonNullable<BaseMessageProps["message"]>
+      if (isOrderCustomMessage(baseMessage)) {
+        return (
+          <OrderCustomMessage
+            style={style}
+            message={baseMessage}
+            messageProps={messageProps ?? undefined}
+          />
+        )
+      }
       const ext =
         typeof message.ext === "object" && message.ext ? message.ext : {}
       const title =

@@ -182,6 +182,51 @@ body {
   right: 16px;
 }
 
+.order-drawer .t-drawer__header {
+  min-height: 56px;
+  padding: 0 16px;
+}
+
+.order-drawer .t-drawer__close-btn {
+  right: 16px;
+}
+
+.order-drawer .t-drawer__body {
+  padding: 0;
+  overflow: hidden !important;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.order-drawer .t-drawer__body .t-drawer__content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.order-drawer .t-drawer__body .t-drawer__content > div {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.order-drawer .t-loading__parent {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.order-drawer .t-loading__content {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 .qtn-drawer .t-drawer__body {
   padding: 0;
   overflow: hidden !important;

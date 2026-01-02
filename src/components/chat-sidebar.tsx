@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import dayjs from "dayjs"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { rootStore, useConversationContext } from "easemob-chat-uikit"
-import { CloseIcon, EditIcon } from "tdesign-icons-react"
+import { ChevronLeftIcon, CloseIcon, EditIcon } from "tdesign-icons-react"
 import {
   Button,
   Drawer,
   Form,
   Input,
-  InputAdornment,
   Loading,
   MessagePlugin,
+  Radio,
   Select,
   Textarea,
 } from "tdesign-react"
@@ -17,8 +18,20 @@ import { shallow } from "zustand/shallow"
 import type { FC, ReactNode } from "react"
 
 import { useRequest } from "~/hooks/useRequest"
+import { useHerbStore } from "~/hooks/useStore"
 import qtnUserBusinessSvg from "~/assets/figma/qtn-user-business.svg?raw"
+import qtnInfoSvg from "~/assets/figma/qtn-info.svg?raw"
 import qtnViewSvg from "~/assets/figma/qtn-view.svg?raw"
+import {
+  buildQuestionSections,
+  buildSeverityLabelMap,
+  formatQuestionAnswer,
+  formatQuestionTitle,
+  ImageViewerDialog,
+  TableBlock,
+  TruncatedText,
+  useScrollTabs,
+} from "~/components/qtn/qtn-detail"
 import {
   listHealthTemplates,
   type HealthContentInput,
@@ -30,6 +43,9 @@ import {
   createEmptyOrderContent,
   useOrderStore,
 } from "~/stores/order-store"
+import { listEmployees, type Employee } from "~/services/employees"
+import { joinUserToGroup } from "~/services/chat-groups"
+import { editConsultation, type ConsultationEditPayload } from "~/services/consultations"
 
 export type SidebarTab =
   | "questionnaire"
@@ -63,69 +79,53 @@ const SvgIcon = ({
   className?: string
 }) => <span className={className} dangerouslySetInnerHTML={{ __html: svg }} />
 
-const QuestionnaireContent = () => {
-  return (
-    <div className="space-y-3 p-4">
-      {/* 示例问卷卡片 */}
-      <div className="rounded border border-border bg-neutral-special-light p-3">
-        <div className="mb-2 flex items-start justify-between">
-          <div>
-            <div className="mb-1 flex items-center gap-2">
-              <span className="text-sm font-medium text-neutral-950/90">
-                病患名称+创建时间（名称）
-              </span>
-            </div>
-            <div className="text-xs text-neutral-950/40">更新时间</div>
-          </div>
-        </div>
-        <div className="mb-2 text-xs text-neutral-600">
-          是否为自己已的问卷
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="flex-1 rounded bg-white px-3 py-1.5 text-xs text-neutral-600 hover:bg-neutral-950/5"
-          >
-            查看详情/修改
-          </button>
-          <button
-            type="button"
-            className="rounded bg-primary px-4 py-1.5 text-xs text-white hover:bg-primary-600"
-          >
-            发送
-          </button>
-        </div>
-      </div>
+const formatDateTime = (value?: string | null) => {
+  if (!value) return "-"
+  const date = dayjs(value)
+  return date.isValid() ? date.format("YYYY.MM.DD HH:mm") : "-"
+}
 
-      <div className="rounded border border-border bg-neutral-special-light p-3">
-        <div className="mb-2 flex items-start justify-between">
-          <div>
-            <div className="mb-1 flex items-center gap-2">
-              <span className="text-sm font-medium text-neutral-950/90">
-                病患名称+创建时间（名称）
-              </span>
+const QuestionnaireContent = () => {
+  const { currentConversation } = useConversationContext()
+  const groupId =
+    currentConversation?.chatType === "groupChat"
+      ? currentConversation.conversationId
+      : undefined
+
+  const { data, loading } = useRequest(
+    () =>
+      groupId
+        ? getConsultationDetailByGroupId(groupId)
+        : Promise.resolve(null),
+    { refreshDeps: [groupId] }
+  )
+
+  const consultation = (data?.consultation ?? {}) as Record<string, unknown>
+  const patientName =
+    (consultation.patient as string) ||
+    (consultation.patientName as string) ||
+    (consultation.userName as string) ||
+    "-"
+  const createTime = formatDateTime(consultation.createTime as string)
+
+  return (
+    <div className="p-4">
+      <Loading loading={loading}>
+        {groupId && data ? (
+          <div className="rounded border border-border bg-white p-4">
+            <div className="text-sm font-medium text-neutral-950/90">
+              {patientName}（{createTime}）
             </div>
-            <div className="text-xs text-neutral-950/40">更新时间</div>
+            <div className="mt-2 text-xs text-neutral-950/40">
+              点击顶部标签「问卷」查看详情并编辑诊断报告
+            </div>
           </div>
-        </div>
-        <div className="mb-2 text-xs text-neutral-600">
-          是否为自己已的问卷
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="flex-1 rounded bg-white px-3 py-1.5 text-xs text-neutral-600 hover:bg-neutral-950/5"
-          >
-            查看详情/修改
-          </button>
-          <button
-            type="button"
-            className="rounded bg-primary px-4 py-1.5 text-xs text-white hover:bg-primary-600"
-          >
-            发送
-          </button>
-        </div>
-      </div>
+        ) : (
+          <div className="rounded border border-border bg-white p-4 text-sm text-neutral-950/60">
+            {groupId ? "暂无问诊信息" : "请选择群聊后查看问诊"}
+          </div>
+        )}
+      </Loading>
     </div>
   )
 }
@@ -156,7 +156,12 @@ const toNumber = (value: unknown) => {
   return Number.isNaN(parsed) ? undefined : parsed
 }
 
-const OrdersContent = () => {
+interface OrdersContentProps {
+  onClose?: () => void
+}
+
+const OrdersContent: FC<OrdersContentProps> = ({ onClose }) => {
+  const handleClose = onClose ?? (() => {})
   const { currentConversation } = useConversationContext()
   const groupId =
     currentConversation?.chatType === "groupChat"
@@ -360,59 +365,66 @@ const OrdersContent = () => {
     return ""
   }
 
-  const getId = (...values: unknown[]) => {
+  const getStringId = (...values: unknown[]) => {
     for (const value of values) {
-      if (typeof value === "number" && !Number.isNaN(value)) return value
       if (typeof value === "string" && value.trim()) {
-        const parsed = Number(value)
-        if (!Number.isNaN(parsed)) return parsed
+        return value.trim()
+      }
+      if (typeof value === "number" && !Number.isNaN(value)) {
+        return String(value)
       }
     }
     return undefined
   }
 
-  const toRecord = (value: unknown) =>
-    value && typeof value === "object"
-      ? (value as Record<string, unknown>)
-      : {}
-  const normalizeMain = (value: unknown) => {
-    const record = toRecord(value)
-    return record
-  }
-  const resolveMainFromDetail = (detail: unknown) => {
-    const detailRecord = toRecord(detail)
-    const candidates = [
-      detailRecord.qtnMainVO,
-      detailRecord.qtnMainVo,
-      detailRecord.qtnMain,
-      detailRecord.questions ? detailRecord : null,
-      toRecord(detailRecord.consultation).qtnMainVO,
-      toRecord(detailRecord.consultation).qtnMain,
-    ]
-    const target = candidates.find(
-      (item) => item && typeof item === "object"
-    )
-    return normalizeMain(target)
-  }
-  const resolveMainFirst = (detail: unknown) => {
-    const main = resolveMainFromDetail(detail)
-    const record = toRecord(main)
-    const list = record.list
-    if (Array.isArray(list) && list.length > 0) {
-      return toRecord(list[0])
-    }
-    return record
-  }
+  const toRecord = useCallback(
+    (value: unknown) =>
+      value && typeof value === "object"
+        ? (value as Record<string, unknown>)
+        : {},
+    []
+  )
+
+  const resolveMainFromDetail = useCallback(
+    (detail: unknown) => {
+      const detailRecord = toRecord(detail)
+      const candidates = [
+        detailRecord.qtnMainVO,
+        detailRecord.qtnMainVo,
+        detailRecord.qtnMain,
+        detailRecord.questions ? detailRecord : null,
+        toRecord(detailRecord.consultation).qtnMainVO,
+        toRecord(detailRecord.consultation).qtnMain,
+      ]
+      const target = candidates.find(
+        (item) => item && typeof item === "object"
+      )
+      return toRecord(target)
+    },
+    [toRecord]
+  )
+
+  const resolveMainFirst = useCallback(
+    (detail: unknown) => {
+      const main = resolveMainFromDetail(detail)
+      const list = main.list
+      if (Array.isArray(list) && list.length > 0) {
+        return toRecord(list[0])
+      }
+      return main
+    },
+    [resolveMainFromDetail, toRecord]
+  )
   const consultation = useMemo(() => {
     if (consultationDetail?.consultation) {
       return toRecord(consultationDetail.consultation)
     }
     return toRecord(consultationDetail)
-  }, [consultationDetail])
+  }, [consultationDetail, toRecord])
 
   const qtnMain = useMemo(
     () => resolveMainFromDetail(consultationDetail),
-    [consultationDetail]
+    [consultationDetail, resolveMainFromDetail]
   )
   const questions = useMemo(() => {
     const record = qtnMain as Record<string, unknown>
@@ -458,11 +470,11 @@ const OrdersContent = () => {
     return [...(list as QtnQuestion[])].sort(
       (a, b) => (a.sort ?? 0) - (b.sort ?? 0)
     )
-  }, [qtnMain])
+  }, [qtnMain, toRecord])
 
   const qtnMainFirst = useMemo(
     () => resolveMainFirst(consultationDetail),
-    [consultationDetail]
+    [consultationDetail, resolveMainFirst]
   )
 
   const patientName = getText(
@@ -623,7 +635,7 @@ const OrdersContent = () => {
       4: "感觉很严重",
       5: "感觉非常严重",
     }
-  }, [qtnMain])
+  }, [qtnMain, toRecord])
   const renderTag = (label: string) => (
     <span className="inline-flex items-center rounded-[3px] border border-[#e7e7e7] bg-[#f3f3f3] px-2 py-0.5 text-[12px] leading-[20px] text-[rgba(0,0,0,0.6)]">
       {label}
@@ -814,11 +826,11 @@ const OrdersContent = () => {
       buildSections(questions, "default")
     }
     return sections
-  }, [qtnMain, questions])
+  }, [qtnMain, questions, toRecord])
 
   useEffect(() => {
     if (!consultationDetail) return
-    const userAnswerId = getId(
+    const userAnswerId = getStringId(
       consultation.userAnswerId,
       consultation.answerId,
       consultation.consultationId,
@@ -827,7 +839,7 @@ const OrdersContent = () => {
       qtnMainFirst.qtnMainId
     )
     if (userAnswerId && !form.getFieldValue("userAnswerId")) {
-      form.setFieldsValue({ userAnswerId: String(userAnswerId) })
+      form.setFieldsValue({ userAnswerId })
     }
     const disease = getText(consultation.disease, qtnMainFirst.disease)
     if (disease && !form.getFieldValue("disease")) {
@@ -869,6 +881,7 @@ const OrdersContent = () => {
       MessagePlugin.warning("请完善服务一的名称和内容")
       return
     }
+    editSnapshotRef.current = null
     setEditingGroupId(null)
   }
 
@@ -886,7 +899,7 @@ const OrdersContent = () => {
       detail = await reloadConsultation()
     }
     const detailMain = resolveMainFirst(detail)
-    const userAnswerId = getId(
+    const userAnswerId = getStringId(
       values.userAnswerId,
       detail?.consultation?.userAnswerId,
       detail?.consultation?.answerId,
@@ -956,10 +969,37 @@ const OrdersContent = () => {
     })
   }
 
+  const canSendOrder = Boolean(groupId && hasPackage && !isEditing)
+
   return (
     <div className="flex h-full flex-col bg-white">
-      <Loading loading={loading || consultationLoading} size="small">
-        <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-[#e7e7e7] px-4 py-4">
+        <button
+          type="button"
+          className="flex items-center gap-2 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)] hover:text-[rgba(0,0,0,0.9)]"
+          onClick={handleClose}
+        >
+          <ChevronLeftIcon size={16} />
+          返回
+        </button>
+        <div className="text-[16px] font-semibold leading-[24px] text-[rgba(0,0,0,0.9)]">
+          创建订单
+        </div>
+        <button
+          type="button"
+          className="flex size-8 items-center justify-center rounded hover:bg-[#f3f3f3]"
+          onClick={handleClose}
+        >
+          <CloseIcon size={16} />
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <Loading
+          loading={loading || consultationLoading}
+          size="small"
+          className="h-full"
+        >
           <Form
             form={form}
             labelAlign="top"
@@ -967,13 +1007,13 @@ const OrdersContent = () => {
             colon={false}
             className="flex h-full flex-col"
           >
-            <div className="flex-1 overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-hidden">
               <div className="flex h-full">
-                <div className="flex-1 overflow-y-auto">
+                <div className="min-h-0 flex-1 overflow-y-auto">
                   <div className="border-b border-[#e7e7e7]">
                     <div className="px-[23px]">
                       <div className="flex h-[60px] items-center border-b border-[#e7e7e7] text-[16px] font-semibold leading-[24px] text-[rgba(0,0,0,0.9)]">
-                        问卷
+                        问诊信息
                       </div>
                     </div>
                     <div className="px-[23px] pb-6 pt-6">
@@ -1062,7 +1102,7 @@ const OrdersContent = () => {
                             <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
                               {block.title}
                             </div>
-                            <div className="mt-2 min-h-[124px] rounded-[3px] border border-[#dcdcdc] bg-white px-2 py-[5px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)] whitespace-pre-wrap">
+                            <div className="mt-2 min-h-[124px] whitespace-pre-wrap rounded-[3px] border border-[#dcdcdc] bg-white px-2 py-[5px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
                               {block.content}
                             </div>
                           </div>
@@ -1071,275 +1111,288 @@ const OrdersContent = () => {
                     </div>
                   </div>
                 </div>
-                <div className="w-[360px] shrink-0 border-l border-[#e7e7e7]">
+
+                <div className="min-h-0 w-[360px] shrink-0 border-l border-[#e7e7e7]">
                   <div className="flex h-full flex-col">
-                    <div className="flex-1 overflow-y-auto px-6 pb-6 pt-6">
+                    <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-6">
                       <div className="w-[312px] pb-6">
-                <div className="flex gap-3">
-                  <div className="flex w-[100px] flex-col gap-6 text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
-                    <span>订单编号</span>
-                    <span>病患姓名</span>
-                    <span>问诊医生</span>
-                  </div>
-                  <div className="flex w-[200px] flex-col gap-6 text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
-                    <span>{createdOrder?.orderNum ?? "-"}</span>
-                    <span>{patientName || "-"}</span>
-                    <span>{doctorName || "-"}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="w-[312px] pb-6">
-                <div className="flex items-center gap-0.5 pb-2 text-[14px] leading-[22px]">
-                  <span className="text-[rgba(0,0,0,0.9)]">选择病种</span>
-                  <span className="text-[#d54941]">*</span>
-                </div>
-                <Form.FormItem
-                  name="disease"
-                  rules={[{ required: true, message: "请选择病种" }]}
-                  className="!mb-0"
-                >
-                  <Select
-                    placeholder="选择病种"
-                    clearable
-                    filterable
-                    creatable
-                    options={diseaseOptions}
-                  />
-                </Form.FormItem>
-              </div>
-
-              {isEditing ? (
-                <div className="w-[312px] border-t border-[#e7e7e7] px-4 py-6">
-                  <div className="space-y-6">
-                    <div>
-                      <div className="flex items-center gap-0.5 pb-2 text-[14px] leading-[22px]">
-                        <span className="text-[rgba(0,0,0,0.9)]">套餐名</span>
-                        <span className="text-[#d54941]">*</span>
+                        <div className="text-[16px] font-semibold leading-[24px] text-[rgba(0,0,0,0.9)]">
+                          订单信息
+                        </div>
                       </div>
-                      <Form.FormItem
-                        name="templateId"
-                        rules={[{ required: true, message: "请选择套餐" }]}
-                        className="!mb-0"
-                      >
-                        <Select
-                          placeholder="选择套餐"
-                          clearable
-                          filterable
-                          options={packageOptions}
-                          onChange={(value) => handleTemplateChange(value)}
-                        />
-                      </Form.FormItem>
-                    </div>
-
-                    <div className="space-y-4">
-                      {contents.map((service, index) => {
-                        const isRequired = index === 0
-                        return (
-                          <div key={service.title ?? index} className="space-y-2">
-                            <div className="flex items-center justify-between text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
-                              <div className="flex items-center gap-1">
-                                <span>{`服务${index + 1}`}</span>
-                                {isRequired ? (
-                                  <span className="text-[#d54941]">*</span>
-                                ) : (
-                                  <span className="text-[rgba(0,0,0,0.6)]">
-                                    （选填）
-                                  </span>
-                                )}
-                              </div>
-                              {isRequired ? null : (
-                                <button
-                                  type="button"
-                                  className="flex size-5 items-center justify-center text-[rgba(0,0,0,0.6)]"
-                                  onClick={() => handleRemoveService(index)}
-                                >
-                                  <CloseIcon size={14} />
-                                </button>
-                              )}
-                            </div>
-                            <Input
-                              value={service.name ?? ""}
-                              onChange={(value) =>
-                                updateService(index, "name", value)
-                              }
-                              placeholder="请输入服务名"
-                            />
-                            <Textarea
-                              value={service.content ?? ""}
-                              onChange={(value) =>
-                                updateService(index, "content", value)
-                              }
-                              placeholder="请输入服务详细内容"
-                              autosize={{ minRows: 3, maxRows: 4 }}
-                            />
+                      <div className="w-[312px] pb-6">
+                        <div className="flex gap-3">
+                          <div className="flex w-[100px] flex-col gap-6 text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                            <span>订单编号</span>
+                            <span>病患姓名</span>
+                            <span>问诊医生</span>
                           </div>
-                        )
-                      })}
-                      <button
-                        type="button"
-                        className="flex w-full justify-end text-[12px] leading-[20px] text-brand"
-                        onClick={handleAddService}
-                      >
-                        添加服务
-                      </button>
-                    </div>
+                          <div className="flex w-[200px] flex-col gap-6 text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                            <span>{createdOrder?.orderNum ?? "-"}</span>
+                            <span>{patientName || "-"}</span>
+                            <span>{doctorName || "-"}</span>
+                          </div>
+                        </div>
+                      </div>
 
-                    <div className="space-y-6">
-                      <div>
-                        <div className="flex items-center gap-0.5 pb-2 text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
-                          <span>套餐现价</span>
+                      <div className="w-[312px] pb-6">
+                        <div className="flex items-center gap-0.5 pb-2 text-[14px] leading-[22px]">
+                          <span className="text-[rgba(0,0,0,0.9)]">
+                            选择病种
+                          </span>
                           <span className="text-[#d54941]">*</span>
                         </div>
                         <Form.FormItem
-                          name="price"
-                          rules={[{ required: true, message: "请输入价格" }]}
+                          name="disease"
+                          rules={[{ required: true, message: "请选择病种" }]}
                           className="!mb-0"
                         >
-                          <InputAdornment className="w-full" append="人民币">
-                            <Input placeholder="请填写价格" />
-                          </InputAdornment>
+                          <Select
+                            placeholder="选择病种"
+                            clearable
+                            filterable
+                            creatable
+                            options={diseaseOptions}
+                          />
                         </Form.FormItem>
                       </div>
-                      <div>
-                        <div className="flex items-center gap-1 pb-2 text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
-                          <span>套餐原价</span>
-                          <span className="text-[rgba(0,0,0,0.6)]">
-                            （选填）
+
+                      <div className="w-[312px] pb-6">
+                        <div className="flex items-center gap-0.5 pb-2 text-[14px] leading-[22px]">
+                          <span className="text-[rgba(0,0,0,0.9)]">
+                            选择套餐
                           </span>
+                          <span className="text-[#d54941]">*</span>
                         </div>
-                        <Form.FormItem name="originalPrice" className="!mb-0">
-                          <InputAdornment className="w-full" append="人民币">
-                            <Input placeholder="请填写价格" />
-                          </InputAdornment>
+                        <Form.FormItem
+                          name="templateId"
+                          rules={[{ required: true, message: "请选择套餐" }]}
+                          className="!mb-0"
+                        >
+                          <Select
+                            placeholder="选择套餐"
+                            clearable
+                            filterable
+                            options={packageOptions}
+                            onChange={(value) => handleTemplateChange(value)}
+                          />
                         </Form.FormItem>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-end gap-5 text-[12px] leading-[20px]">
-                      <button
-                        type="button"
-                        className="text-brand"
-                        onClick={handleSaveEdit}
-                      >
-                        保存编辑
-                      </button>
-                      <button
-                        type="button"
-                        className="text-[rgba(0,0,0,0.6)]"
-                        onClick={handleCancelEdit}
-                      >
-                        取消
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="w-[312px] pb-6">
-                  <div className="flex items-center gap-0.5 pb-2 text-[14px] leading-[22px]">
-                    <span className="text-[rgba(0,0,0,0.9)]">选择套餐</span>
-                    <span className="text-[#d54941]">*</span>
-                  </div>
-                  <Form.FormItem
-                    name="templateId"
-                    rules={[{ required: true, message: "请选择套餐" }]}
-                    className="!mb-0"
-                  >
-                    <Select
-                      placeholder="选择套餐"
-                      clearable
-                      filterable
-                      options={packageOptions}
-                      onChange={(value) => handleTemplateChange(value)}
-                    />
-                  </Form.FormItem>
-                </div>
-              )}
 
-              {!isEditing && hasPackage ? (
-                <div className="w-[312px] border-t border-[#e7e7e7] px-4 py-6">
-                  <div className="space-y-6">
-                    <div className="space-y-4">
-                      {contents.map((service, index) => (
-                        <div key={service.title ?? index} className="space-y-1">
-                          <p className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
-                            {service.name || `服务${index + 1}`}
-                          </p>
-                          <p className="text-[12px] leading-[20px] text-[rgba(0,0,0,0.6)]">
-                            {service.content || "-"}
-                          </p>
+                      {isEditing ? (
+                        <div className="w-[312px] border-t border-[#e7e7e7] px-4 py-6">
+                          <div className="space-y-6">
+                            <div className="space-y-4">
+                              {contents.map((service, index) => {
+                                const isRequired = index === 0
+                                return (
+                                  <div
+                                    key={service.title ?? index}
+                                    className="space-y-2"
+                                  >
+                                    <div className="flex items-center justify-between text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                                      <div className="flex items-center gap-1">
+                                        <span>{`服务${index + 1}`}</span>
+                                        {isRequired ? (
+                                          <span className="text-[#d54941]">*</span>
+                                        ) : (
+                                          <span className="text-[rgba(0,0,0,0.6)]">
+                                            （选填）
+                                          </span>
+                                        )}
+                                      </div>
+                                      {isRequired ? null : (
+                                        <button
+                                          type="button"
+                                          className="flex size-5 items-center justify-center text-[rgba(0,0,0,0.6)]"
+                                          onClick={() => handleRemoveService(index)}
+                                        >
+                                          <CloseIcon size={14} />
+                                        </button>
+                                      )}
+                                    </div>
+                                    <Input
+                                      value={service.name ?? ""}
+                                      onChange={(value) =>
+                                        updateService(index, "name", value)
+                                      }
+                                      placeholder="请输入服务名"
+                                    />
+                                    <Textarea
+                                      value={service.content ?? ""}
+                                      onChange={(value) =>
+                                        updateService(index, "content", value)
+                                      }
+                                      placeholder="请输入服务详细内容"
+                                      autosize={{ minRows: 3, maxRows: 4 }}
+                                    />
+                                  </div>
+                                )
+                              })}
+                              <button
+                                type="button"
+                                className="flex w-full justify-end text-[12px] leading-[20px] text-brand"
+                                onClick={handleAddService}
+                              >
+                                添加服务
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      ))}
-                    </div>
+                      ) : (
+                        <div />
+                      )}
 
-                    <div className="space-y-2">
-                      <div className="flex items-start gap-2">
-                        <span className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
-                          现价：
-                        </span>
-                        <div className="flex items-center gap-1 text-[14px] font-semibold leading-[22px] text-[#1a1a1a]">
-                          <span>¥</span>
-                          <span>{displayPrice}</span>
+                      <div
+                        className={`w-[312px] border-t border-[#e7e7e7] px-4 py-6 ${
+                          isEditing ? "" : "hidden"
+                        }`}
+                      >
+                        <div className="space-y-6">
+                          <div>
+                            <div className="flex items-center gap-0.5 pb-2 text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                              <span>套餐现价</span>
+                              <span className="text-[#d54941]">*</span>
+                            </div>
+                            <Form.FormItem
+                              name="price"
+                              rules={[{ required: true, message: "请输入价格" }]}
+                              className="!mb-0"
+                            >
+                              <Input placeholder="请填写价格" suffix="人民币" />
+                            </Form.FormItem>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1 pb-2 text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                              <span>套餐原价</span>
+                              <span className="text-[rgba(0,0,0,0.6)]">
+                                （选填）
+                              </span>
+                            </div>
+                            <Form.FormItem name="originalPrice" className="!mb-0">
+                              <Input placeholder="请填写价格" suffix="人民币" />
+                            </Form.FormItem>
+                          </div>
+                          <div className="flex items-center justify-end gap-5 text-[12px] leading-[20px]">
+                            <button
+                              type="button"
+                              className="text-brand"
+                              onClick={handleSaveEdit}
+                            >
+                              保存编辑
+                            </button>
+                            <button
+                              type="button"
+                              className="text-[rgba(0,0,0,0.6)]"
+                              onClick={handleCancelEdit}
+                            >
+                              取消
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className="flex w-full items-center justify-end gap-1 text-[12px] leading-[20px] text-[rgba(0,0,0,0.6)]"
-                        onClick={handleEdit}
-                      >
-                        <EditIcon
-                          size={16}
-                          className="text-[rgba(0,0,0,0.6)]"
-                        />
-                        编辑
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
 
-              {!isEditing ? (
-                <>
-                  <Form.FormItem name="price" className="hidden">
-                    <Input />
-                  </Form.FormItem>
-                  <Form.FormItem name="originalPrice" className="hidden">
-                    <Input />
-                  </Form.FormItem>
-                </>
-              ) : null}
-              <Form.FormItem name="packageName" className="hidden">
-                <Input />
-              </Form.FormItem>
-              <Form.FormItem name="userAnswerId" className="hidden">
-                <Input />
-              </Form.FormItem>
+                      {!isEditing && hasPackage ? (
+                        <div className="w-[312px] border-t border-[#e7e7e7] px-4 py-6">
+                          <div className="space-y-6">
+                            <div className="space-y-4">
+                              {contents.map((service, index) => (
+                                <div
+                                  key={service.title ?? index}
+                                  className="space-y-1"
+                                >
+                                  <p className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                                    {service.name || `服务${index + 1}`}
+                                  </p>
+                                  <p className="text-[12px] leading-[20px] text-[rgba(0,0,0,0.6)]">
+                                    {service.content || "-"}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="flex items-start gap-2">
+                                <span className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                                  现价：
+                                </span>
+                                <div className="flex items-center gap-1 text-[14px] font-semibold leading-[22px] text-[#1a1a1a]">
+                                  <span>¥</span>
+                                  <span>{displayPrice}</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-end gap-1 text-[12px] leading-[20px] text-[rgba(0,0,0,0.6)]"
+                                onClick={handleEdit}
+                              >
+                                <EditIcon
+                                  size={16}
+                                  className="text-[rgba(0,0,0,0.6)]"
+                                />
+                                编辑
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <Form.FormItem name="packageName" className="hidden">
+                        <Input />
+                      </Form.FormItem>
+                      <Form.FormItem name="userAnswerId" className="hidden">
+                        <Input />
+                      </Form.FormItem>
                     </div>
-                    {hasPackage && !isEditing ? (
-                      <div className="flex h-[60px] items-center gap-2 border-t border-[#e7e7e7] bg-white px-4">
-                        <Button
-                          theme="primary"
-                          loading={createLoading}
-                          onClick={handleSubmit}
-                          className="!h-8 !rounded-[3px] !px-4 !text-[14px] !leading-[22px]"
-                        >
-                          发送订单
-                        </Button>
-                        <Button
-                          variant="base"
-                          onClick={handleReset}
-                          className="!h-8 !rounded-[3px] !bg-[#e7e7e7] !px-4 !text-[14px] !leading-[22px] !text-[rgba(0,0,0,0.9)]"
-                        >
-                          取消
-                        </Button>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
               </div>
             </div>
           </Form>
+        </Loading>
+      </div>
+
+      <div className="border-t border-[#e7e7e7] bg-white px-6 py-4">
+        <div className="flex items-center justify-between gap-6">
+          <div className="text-[12px] leading-[20px] text-[rgba(0,0,0,0.4)]">
+            {!groupId
+              ? "请选择群聊后创建订单"
+              : isEditing
+              ? "编辑订单信息"
+              : hasPackage
+              ? "确认无误后发送订单"
+              : "请选择套餐后继续"}
+          </div>
+          <div className="flex items-center gap-3">
+            {canSendOrder ? (
+              <Button
+                theme="primary"
+                loading={createLoading}
+                onClick={handleSubmit}
+                className="!h-8 !rounded-[3px] !px-4 !text-[14px] !leading-[22px]"
+              >
+                发送订单
+              </Button>
+            ) : null}
+            {canSendOrder ? (
+              <Button
+                variant="base"
+                onClick={handleReset}
+                className="!h-8 !rounded-[3px] !bg-[#e7e7e7] !px-4 !text-[14px] !leading-[22px] !text-[rgba(0,0,0,0.9)]"
+              >
+                取消
+              </Button>
+            ) : null}
+            <Button
+              variant="outline"
+              onClick={handleClose}
+              className="!h-8 !rounded-[3px] !px-4 !text-[14px] !leading-[22px]"
+            >
+              关闭
+            </Button>
+          </div>
         </div>
-      </Loading>
+      </div>
     </div>
   )
 }
@@ -1360,10 +1413,721 @@ const AppointmentRecordsContent = () => {
   )
 }
 
-const AddAdvisorContent = () => {
+const ChatConsultationDetailContent = ({
+  onClose,
+}: {
+  onClose: () => void
+}) => {
+  const sessionRole = useHerbStore((state) => state.role)
+  const { currentConversation } = useConversationContext()
+  const groupId =
+    currentConversation?.chatType === "groupChat"
+      ? currentConversation.conversationId
+      : undefined
+
+  const {
+    data: detail,
+    loading,
+    runAsync: reload,
+  } = useRequest(
+    () =>
+      groupId
+        ? getConsultationDetailByGroupId(groupId)
+        : Promise.resolve(null),
+    { refreshDeps: [groupId] }
+  )
+
+  const getText = (...values: unknown[]) => {
+    for (const value of values) {
+      if (typeof value === "string" && value.trim()) return value
+      if (typeof value === "number" && !Number.isNaN(value)) return String(value)
+    }
+    return "-"
+  }
+  const toRecord = (value: unknown): Record<string, unknown> =>
+    value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+  const resolveMainFromDetail = (value: unknown) => {
+    const detailRecord = toRecord(value)
+    const dataRecord = toRecord(detailRecord.data)
+    const candidates = [
+      detailRecord.qtnMainVO,
+      detailRecord.qtnMainVo,
+      detailRecord.qtnMain,
+      detailRecord.questions ? detailRecord : null,
+      toRecord(detailRecord.consultation).qtnMainVO,
+      toRecord(detailRecord.consultation).qtnMain,
+      dataRecord.qtnMainVO,
+      dataRecord.qtnMainVo,
+      dataRecord.qtnMain,
+    ]
+    return candidates.find((item) => item && typeof item === "object") ?? null
+  }
+
+  const detailRecord = toRecord(detail)
+  const dataRecord = toRecord(detailRecord.data)
+  const consultation = toRecord(
+    detailRecord.consultation ?? dataRecord.consultation ?? detailRecord
+  )
+  const qtnMain = resolveMainFromDetail(detail)
+  const questionSections = useMemo(
+    () => buildQuestionSections(qtnMain),
+    [qtnMain]
+  )
+  const severityLabelMap = useMemo(
+    () => buildSeverityLabelMap(qtnMain),
+    [qtnMain]
+  )
+
+  const consultationId =
+    typeof consultation.consultationId === "number"
+      ? consultation.consultationId
+      : undefined
+
+  const hasConsultation = Boolean(groupId && detail && consultationId)
+
+  const [imageViewer, setImageViewer] = useState<{
+    visible: boolean
+    title: string
+    images: string[]
+    initialIndex: number
+  }>({ visible: false, title: "", images: [] })
+
+  const [draftMsgs, setDraftMsgs] = useState<{
+    advisorMsg?: string
+    doctorMsg?: string
+    adviceMsg?: string
+  }>({})
+  const advisorMsg =
+    draftMsgs.advisorMsg ?? String(consultation.advisorMsg ?? "")
+  const doctorMsg = draftMsgs.doctorMsg ?? String(consultation.doctorMsg ?? "")
+  const adviceMsg = draftMsgs.adviceMsg ?? String(consultation.adviceMsg ?? "")
+
+  const canEditAdvisorMsg = sessionRole === 4
+  const canEditDoctorFields = sessionRole === 3
+  const canSave = canEditAdvisorMsg || canEditDoctorFields
+  const showSaveButton = hasConsultation && canSave
+
+  const { runAsync: runEdit, loading: saving } = useRequest(editConsultation, {
+    manual: true,
+  })
+
+  const openImages = useCallback(
+    (payload: { title: string; images: string[]; initialIndex?: number }) => {
+      if (!payload.images.length) return
+      setImageViewer({
+        visible: true,
+        title: payload.title,
+        images: payload.images,
+        initialIndex: payload.initialIndex ?? 0,
+      })
+    },
+    []
+  )
+
+  const tabs = useMemo(
+    () => [
+      { key: "info", label: "问诊信息" },
+      { key: "questionnaire", label: "患者问卷" },
+      { key: "diagnosis", label: "诊断报告" },
+    ],
+    []
+  )
+  const { containerRef, setSectionRef, activeKey, scrollTo } =
+    useScrollTabs(tabs)
+
+  const handleSave = async () => {
+    if (!consultationId) {
+      MessagePlugin.error("缺少问诊ID，无法保存")
+      return
+    }
+    if (!canSave) {
+      MessagePlugin.warning("当前账号无编辑权限")
+      return
+    }
+
+    const payload: ConsultationEditPayload = { consultationId }
+    if (canEditAdvisorMsg) payload.advisorMsg = advisorMsg
+    if (canEditDoctorFields) {
+      payload.doctorMsg = doctorMsg
+      payload.adviceMsg = adviceMsg
+    }
+
+    const ok = await runEdit(payload)
+    if (!ok) {
+      MessagePlugin.error("保存失败")
+      return
+    }
+    MessagePlugin.success("保存成功")
+    setDraftMsgs({})
+    await reload()
+  }
+
+  const statusKey = getText(consultation.status)
+  const statusMeta =
+    {
+      "0": { label: "待问诊", color: "#E37318", dot: "#E37318" },
+      "1": { label: "已完成", color: "#2BA471", dot: "#2BA471" },
+      "9": { label: "已取消", color: "#999999", dot: "#999999" },
+    }[statusKey] ?? { label: "-", color: "#999999", dot: "#999999" }
+  const consultNo = getText(
+    consultation.consultationNo,
+    consultation.consultationNum,
+    consultation.consultationId,
+    detailRecord.consultationId,
+    detailRecord.batchNo
+  )
+  const consultUserName = getText(
+    consultation.userName,
+    consultation.username,
+    consultation.name
+  )
+  const consultPatient = getText(
+    consultation.patient,
+    consultation.patientName,
+    consultation.userName,
+    consultation.name
+  )
+  const consultCreateTime = formatDateTime(getText(consultation.createTime))
+  const consultTime = getText(
+    consultation.consultationTime,
+    consultation.qtnTime,
+    consultation.visitTime,
+    consultation.startTime
+  )
+  const consultDoctor = getText(
+    consultation.doctorName,
+    consultation.doctor,
+    consultation.doctorUserName,
+    consultation.advisorName
+  )
+  const consultServiceType = getText(
+    consultation.serviceType,
+    consultation.serviceName,
+    consultation.service
+  )
+
+  const advisorValue = canEditAdvisorMsg
+    ? advisorMsg
+    : advisorMsg.trim()
+      ? advisorMsg
+      : "-"
+  const doctorValue = canEditDoctorFields
+    ? doctorMsg
+    : doctorMsg.trim()
+      ? doctorMsg
+      : "-"
+  const adviceValue = canEditDoctorFields
+    ? adviceMsg
+    : adviceMsg.trim()
+      ? adviceMsg
+      : "-"
+
   return (
-    <div className="p-4">
-      <div className="text-center text-sm text-neutral-950/40">添加健康顾问功能开发中</div>
+    <div className="flex h-full flex-col bg-white">
+      <div className="flex items-center justify-between border-b border-[#e7e7e7] px-4 py-4">
+        <button
+          type="button"
+          className="flex items-center gap-2 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)] hover:text-[rgba(0,0,0,0.9)]"
+          onClick={onClose}
+        >
+          <ChevronLeftIcon size={16} />
+          返回
+        </button>
+        <button
+          type="button"
+          className="flex size-8 items-center justify-center rounded hover:bg-[#f3f3f3]"
+          onClick={onClose}
+        >
+          <CloseIcon size={16} />
+        </button>
+      </div>
+
+      <div className="border-b border-[#e7e7e7] bg-white px-12">
+        <div className="flex h-12 items-center gap-6 text-[14px] leading-[22px]">
+          {tabs.map((tab) => {
+            const isActive = tab.key === activeKey
+            const isEnabled = Boolean(groupId && detail)
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                className={`relative flex h-full items-center ${
+                  isActive ? "text-brand" : "text-[rgba(0,0,0,0.6)]"
+                }`}
+                onClick={() => {
+                  if (!isEnabled) return
+                  scrollTo(tab.key)
+                }}
+              >
+                {tab.label}
+                <span
+                  className={`absolute bottom-0 left-0 h-[2px] w-full rounded-full ${
+                    isActive ? "bg-brand" : "bg-transparent"
+                  }`}
+                />
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1">
+        <Loading loading={loading} className="h-full">
+          <div
+            ref={containerRef}
+            className="h-full overflow-y-auto px-12 pb-8 pt-6"
+          >
+            {!groupId ? (
+              <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                请选择群聊后查看问诊详情
+              </div>
+            ) : !detail ? (
+              <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                暂无问诊详情
+              </div>
+            ) : (
+              <div>
+                <div ref={setSectionRef("info")} className="space-y-6">
+                  <div className="flex items-center gap-4">
+                    <span className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecf9f1]">
+                      <SvgIcon svg={qtnInfoSvg} className="inline-flex size-4" />
+                    </span>
+                    <span className="text-[20px] font-semibold leading-[28px] text-[rgba(0,0,0,0.9)]">
+                      问诊信息
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-8">
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-6">
+                        <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                          问诊编号
+                        </span>
+                        <TruncatedText
+                          value={consultNo}
+                          className="block max-w-[240px] truncate text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]"
+                        />
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                          用户姓名
+                        </span>
+                        <span className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                          {consultUserName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                          病患姓名
+                        </span>
+                        <span className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                          {consultPatient}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                          问诊状态
+                        </span>
+                        <span className="flex items-center gap-2 text-[14px] leading-[22px]">
+                          <span
+                            className="inline-flex size-[6px] rounded-full"
+                            style={{ backgroundColor: statusMeta.dot }}
+                          />
+                          <span style={{ color: statusMeta.color }}>
+                            {statusMeta.label}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-6">
+                        <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                          创建时间
+                        </span>
+                        <span className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                          {consultCreateTime}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                          问诊时间
+                        </span>
+                        <span className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                          {consultTime}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                          问诊医生
+                        </span>
+                        <span className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                          {consultDoctor}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                          服务类型
+                        </span>
+                        <span className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                          {consultServiceType}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div ref={setSectionRef("questionnaire")} className="mt-8 space-y-4">
+                  <div className="flex items-center gap-4">
+                    <span className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecf9f1]">
+                      <SvgIcon
+                        svg={qtnUserBusinessSvg}
+                        className="inline-flex size-4"
+                      />
+                    </span>
+                    <span className="text-[20px] leading-[28px] text-[rgba(0,0,0,0.9)]">
+                      患者问卷
+                    </span>
+                  </div>
+
+                  {questionSections.length ? (
+                    questionSections.map((section) => {
+                      if (!section.questions.length) return null
+                      const headers = section.questions.map((question) =>
+                        formatQuestionTitle(question)
+                      )
+                      const row = section.questions.map((question) =>
+                        formatQuestionAnswer(question, {
+                          severityLabelMap,
+                          onOpenImages: openImages,
+                        })
+                      )
+                      return (
+                        <TableBlock
+                          key={`${section.key}-${headers.length}`}
+                          headers={headers}
+                          rows={[row]}
+                        />
+                      )
+                    })
+                  ) : (
+                    <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                      暂无问卷数据
+                    </div>
+                  )}
+                </div>
+
+                <div ref={setSectionRef("diagnosis")} className="mt-8 space-y-4">
+                  <div className="flex items-center gap-2 text-[14px] font-semibold leading-[22px] text-[#267347]">
+                    <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#ecf9f1] text-[12px] font-semibold text-[#267347]">
+                      ✓
+                    </span>
+                    诊断报告
+                  </div>
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                        健康顾问备注
+                      </div>
+                      <Textarea
+                        value={advisorValue}
+                        readonly={!canEditAdvisorMsg}
+                        onChange={
+                          canEditAdvisorMsg
+                            ? (value) =>
+                                setDraftMsgs((prev) => ({
+                                  ...prev,
+                                  advisorMsg: String(value),
+                                }))
+                            : undefined
+                        }
+                        autosize={{ minRows: 3, maxRows: 6 }}
+                        placeholder={canEditAdvisorMsg ? "请输入健康顾问备注" : "-"}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                        医生诊断
+                      </div>
+                      <Textarea
+                        value={doctorValue}
+                        readonly={!canEditDoctorFields}
+                        onChange={
+                          canEditDoctorFields
+                            ? (value) =>
+                                setDraftMsgs((prev) => ({
+                                  ...prev,
+                                  doctorMsg: String(value),
+                                }))
+                            : undefined
+                        }
+                        autosize={{ minRows: 3, maxRows: 6 }}
+                        placeholder={canEditDoctorFields ? "请输入医生诊断" : "-"}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                        治疗建议
+                      </div>
+                      <Textarea
+                        value={adviceValue}
+                        readonly={!canEditDoctorFields}
+                        onChange={
+                          canEditDoctorFields
+                            ? (value) =>
+                                setDraftMsgs((prev) => ({
+                                  ...prev,
+                                  adviceMsg: String(value),
+                                }))
+                            : undefined
+                        }
+                        autosize={{ minRows: 3, maxRows: 6 }}
+                        placeholder={canEditDoctorFields ? "请输入治疗建议" : "-"}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </Loading>
+      </div>
+
+      <div className="border-t border-[#e7e7e7] bg-white px-12 py-4">
+        <div className="flex items-center justify-between gap-6">
+          <div className="text-[12px] leading-[20px] text-[rgba(0,0,0,0.4)]">
+            {!groupId
+              ? "请选择群聊后查看问诊"
+              : !detail
+              ? "暂无问诊详情"
+              : canSave
+              ? "可编辑并保存"
+              : "仅可查看"}
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="base"
+              onClick={onClose}
+              className="!h-8 !rounded-[3px] !bg-[#e7e7e7] !px-4 !text-[14px] !leading-[22px] !text-[rgba(0,0,0,0.9)]"
+            >
+              关闭
+            </Button>
+            {showSaveButton ? (
+              <Button
+                theme="primary"
+                loading={saving}
+                disabled={loading || !hasConsultation}
+                onClick={handleSave}
+                className="!h-8 !rounded-[3px] !px-4 !text-[14px] !leading-[22px]"
+              >
+                保存
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <ImageViewerDialog
+        key={`${imageViewer.visible}-${imageViewer.images.join("|")}`}
+        visible={imageViewer.visible}
+        title={imageViewer.title}
+        images={imageViewer.images}
+        initialIndex={imageViewer.initialIndex}
+        onClose={() =>
+          setImageViewer((prev) => ({
+            ...prev,
+            visible: false,
+            images: [],
+            initialIndex: 0,
+          }))
+        }
+      />
+    </div>
+  )
+}
+
+const AddAdvisorContent = () => {
+  const { currentConversation } = useConversationContext()
+  const groupId =
+    currentConversation?.chatType === "groupChat"
+      ? currentConversation.conversationId
+      : undefined
+
+  const [role, setRole] = useState<3 | 4>(4)
+  const [keyword, setKeyword] = useState("")
+  const [pageNum, setPageNum] = useState(1)
+  const pageSize = 10
+  const [joiningId, setJoiningId] = useState<number | null>(null)
+  const [joined, setJoined] = useState<Set<number>>(() => new Set())
+
+  useEffect(() => {
+    setPageNum(1)
+  }, [role, keyword])
+
+  const query = useMemo(
+    () => ({
+      role: String(role),
+      pageNum,
+      pageSize,
+      nickName: keyword.trim() ? keyword.trim() : undefined,
+      username: keyword.trim() ? keyword.trim() : undefined,
+    }),
+    [keyword, pageNum, role]
+  )
+
+  const { data, loading, refresh } = useRequest(() => listEmployees(query), {
+    refreshDeps: [JSON.stringify(query)],
+  })
+
+  const users = useMemo(() => data?.record ?? [], [data])
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  const handleJoin = async (user: Employee) => {
+    if (!groupId) {
+      MessagePlugin.warning("当前会话不是群聊，无法添加成员")
+      return
+    }
+    if (!user.userId) {
+      MessagePlugin.error("缺少用户ID")
+      return
+    }
+    if (joined.has(user.userId)) return
+    setJoiningId(user.userId)
+    try {
+      const ok = await joinUserToGroup({ userId: user.userId, hxGroupId: groupId })
+      if (ok) {
+        MessagePlugin.success("已添加到群组")
+        setJoined((prev) => new Set(prev).add(user.userId as number))
+        refresh()
+        return
+      }
+      MessagePlugin.error("添加失败")
+    } catch (error) {
+      console.log("join2Group failed:", error)
+      MessagePlugin.error("添加失败")
+    } finally {
+      setJoiningId(null)
+    }
+  }
+
+  if (!groupId) {
+    return (
+      <div className="p-4">
+        <div className="rounded border border-border bg-white p-4 text-sm text-neutral-950/60">
+          当前会话不是群聊，无法添加健康顾问/医生。
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4 p-4">
+      <div className="rounded border border-border bg-white p-4">
+        <div className="space-y-3">
+          <div className="text-sm font-medium text-neutral-950/90">
+            添加成员到当前群组
+          </div>
+          <div className="text-xs text-neutral-950/40">
+            群组ID：{groupId}
+          </div>
+          <Radio.Group
+            theme="button"
+            variant="outline"
+            value={role}
+            onChange={(value) => setRole(Number(value) === 3 ? 3 : 4)}
+            options={[
+              { label: "健康顾问", value: 4 },
+              { label: "专业医生", value: 3 },
+            ]}
+          />
+          <Input
+            value={keyword}
+            onChange={(value) => setKeyword(String(value))}
+            placeholder="搜索姓名/手机号"
+            clearable
+          />
+        </div>
+      </div>
+
+      <Loading loading={loading}>
+        <div className="space-y-3">
+          {users.length ? (
+            users.map((user, index) => {
+              const userId = user.userId ?? 0
+              const isOnline = user.onlineState === 1
+              const canJoin = Boolean(userId) && !joined.has(userId)
+              const rowKey = String(
+                userId || user.username || user.num || user.nickName || index
+              )
+              return (
+                <div
+                  key={rowKey}
+                  className="rounded border border-border bg-white px-4 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex size-2 rounded-full ${
+                            isOnline ? "bg-[#2BA471]" : "bg-[#c6c6c6]"
+                          }`}
+                        />
+                        <span className="truncate text-sm font-medium text-neutral-950/90">
+                          {user.nickName ?? user.username ?? "-"}
+                        </span>
+                      </div>
+                      <div className="mt-1 space-y-0.5 text-xs text-neutral-950/40">
+                        <div className="truncate">
+                          账号：{user.username ?? "-"}
+                        </div>
+                        <div className="truncate">编号：{user.num ?? "-"}</div>
+                      </div>
+                    </div>
+                    <Button
+                      theme="primary"
+                      disabled={!canJoin || joiningId === userId}
+                      loading={joiningId === userId}
+                      onClick={() => handleJoin(user)}
+                      className="!h-8 !rounded-[3px] !px-3 !text-[14px] !leading-[22px]"
+                    >
+                      {joined.has(userId) ? "已添加" : "添加"}
+                    </Button>
+                  </div>
+                </div>
+              )
+            })
+          ) : (
+            <div className="rounded border border-border bg-white p-6 text-center text-sm text-neutral-950/40">
+              暂无可添加用户
+            </div>
+          )}
+
+          <div className="flex items-center justify-between rounded border border-border bg-white px-4 py-3 text-sm text-neutral-950/60">
+            <span>
+              第 {pageNum} / {totalPages} 页（共 {total} 条）
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                disabled={pageNum <= 1}
+                onClick={() => setPageNum((prev) => Math.max(1, prev - 1))}
+              >
+                上一页
+              </Button>
+              <Button
+                variant="outline"
+                disabled={pageNum >= totalPages}
+                onClick={() =>
+                  setPageNum((prev) => Math.min(totalPages, prev + 1))
+                }
+              >
+                下一页
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Loading>
     </div>
   )
 }
@@ -1406,13 +2170,36 @@ const OrdersDrawer = ({
       visible={visible}
       placement="right"
       size="1000px"
-      header="创建订单"
+      header={false}
       onClose={onClose}
-      closeBtn
+      closeBtn={false}
       className="order-drawer"
       footer={false}
     >
-      <OrdersContent />
+      <OrdersContent onClose={onClose} />
+    </Drawer>
+  )
+}
+
+const QuestionnaireDrawer = ({
+  visible,
+  onClose,
+}: {
+  visible: boolean
+  onClose: () => void
+}) => {
+  return (
+    <Drawer
+      visible={visible}
+      placement="right"
+      size="760px"
+      header={false}
+      onClose={onClose}
+      closeBtn={false}
+      className="qtn-drawer"
+      footer={false}
+    >
+      <ChatConsultationDetailContent onClose={onClose} />
     </Drawer>
   )
 }
@@ -1421,6 +2208,9 @@ export const ChatSidebar: FC<ChatSidebarProps> = ({ activeTab, onClose }) => {
   if (!activeTab) return null
   if (activeTab === "orders") {
     return <OrdersDrawer visible onClose={onClose} />
+  }
+  if (activeTab === "questionnaire") {
+    return <QuestionnaireDrawer visible onClose={onClose} />
   }
 
   const ContentComponent = sidebarContent[activeTab]
