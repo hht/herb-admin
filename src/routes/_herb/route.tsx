@@ -5,6 +5,7 @@ import {
   useRouter,
 } from "@tanstack/react-router"
 import { useEffect } from "react"
+import { rootStore } from "easemob-chat-uikit"
 import {
   ChevronDownIcon,
   SettingIcon,
@@ -20,6 +21,17 @@ const AccountDetector = () => {
   const accessToken = useHerbStore((state) => state.accessToken)
   useEffect(() => {
     if (!accessToken) {
+      try {
+        const client = rootStore.client as unknown as { close?: () => void }
+        client?.close?.()
+      } catch (error) {
+        console.log("easemob client close failed:", error)
+      }
+      try {
+        rootStore.clear()
+      } catch (error) {
+        console.log("easemob rootStore clear failed:", error)
+      }
       router.history.replace("/auth")
     }
   }, [accessToken, router])
@@ -28,6 +40,20 @@ const AccountDetector = () => {
 
 const HerbLayout = () => {
   const resetSession = useHerbStore((state) => state.resetSession)
+  const handleLogout = () => {
+    try {
+      const client = rootStore.client as unknown as { close?: () => void }
+      client?.close?.()
+    } catch (error) {
+      console.log("easemob client close failed:", error)
+    }
+    try {
+      rootStore.clear()
+    } catch (error) {
+      console.log("easemob rootStore clear failed:", error)
+    }
+    resetSession()
+  }
 
   return (
     <Provider>
@@ -51,7 +77,7 @@ const HerbLayout = () => {
               <button
                 type="button"
                 className="flex size-8 items-center justify-center rounded hover:bg-neutral-950/5"
-                onClick={resetSession}
+                onClick={handleLogout}
               >
                 <SettingIcon className="text-neutral-950/90" size={20} />
               </button>
@@ -71,7 +97,8 @@ const HerbLayout = () => {
 
 export const Route = createFileRoute("/_herb")({
   beforeLoad: async () => {
-    if (!useHerbStore.getState().accessToken) {
+    const state = useHerbStore.getState()
+    if (!state.accessToken || !state.hxUserName || !state.hxPassword) {
       throw redirect({
         to: "/auth",
         search: {
