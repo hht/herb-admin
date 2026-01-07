@@ -41,9 +41,21 @@ export interface OrderDetailQuery {
 }
 
 const orderContentSchema: z.ZodType<OrderContentInput> = z.object({
-  title: z.string().nullable().optional(),
-  name: z.string().nullable().optional(),
-  content: z.string().nullable().optional(),
+  title: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? undefined),
+  name: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? undefined),
+  content: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? undefined),
 })
 
 const orderSchema: z.ZodType<Order> = z.object({
