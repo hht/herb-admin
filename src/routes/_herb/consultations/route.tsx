@@ -245,15 +245,18 @@ function ConsultationManagement() {
           <div className="my-6 border-t border-border" />
 
           <Loading loading={loading}>
-            <Table
-              data={records}
-              columns={columns}
-              rowKey="consultationId"
-              bordered
-              hover
-              stripe
-              maxHeight="520px"
-            />
+            <div className="overflow-x-auto">
+              <Table
+                columns={columns}
+                tableLayout="fixed"
+                className="w-full min-w-full"
+                data={records}
+                rowKey="consultationId"
+                loading={loading}
+                empty="暂无问诊数据"
+                cellEmptyContent="-"
+              />
+            </div>
           </Loading>
 
           <div className="mt-6 flex justify-end">

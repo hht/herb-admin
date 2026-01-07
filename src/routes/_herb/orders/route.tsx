@@ -9,7 +9,6 @@ import {
   Dropdown,
   Form,
   Input,
-  Loading,
   Pagination,
   Select,
   Table,
@@ -322,17 +321,18 @@ function OrderManagement() {
 
           <div className="my-6 border-t border-border" />
 
-          <Loading loading={loading}>
+          <div className="overflow-x-auto">
             <Table
-              data={records}
               columns={columns}
+              tableLayout="fixed"
+              className="w-full min-w-full"
+              data={records}
               rowKey="orderId"
-              bordered
-              hover
-              stripe
-              maxHeight="520px"
+              loading={loading}
+              empty="暂无订单数据"
+              cellEmptyContent="-"
             />
-          </Loading>
+          </div>
 
           <div className="mt-6 flex justify-end">
             <Pagination

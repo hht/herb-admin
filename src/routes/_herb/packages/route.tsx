@@ -298,14 +298,12 @@ const PackageSettings = () => {
                       <Popconfirm
                         content="确定删除该套餐吗？"
                         onConfirm={() => handleDelete(item)}
-                        confirmBtn={{ loading: deleteLoading }}
+                        confirmBtn={{ content: "确定", loading: deleteLoading }}
+                        cancelBtn="取消"
                       >
-                        <button
-                          type="button"
-                          className="text-sm text-neutral-600"
-                        >
-                          ...
-                        </button>
+                        <Button size="small" variant="text" theme="danger">
+                          删除
+                        </Button>
                       </Popconfirm>
                       <Button
                         size="small"

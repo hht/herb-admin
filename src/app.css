@@ -274,3 +274,8 @@ body {
   padding: 12px 16px;
   border-top: 1px solid #e7e7e7;
 }
+
+/* Keep the divider between fixed-right columns (e.g. 操作栏) and scrollable table body */
+.t-table__fixed-right {
+  box-shadow: -1px 0 0 #e7e7e7;
+}
