@@ -1,13 +1,15 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   AppIcon,
   ViewListIcon,
   ChevronUpIcon,
   ChevronDownIcon,
 } from "tdesign-icons-react"
+import { Dropdown } from "tdesign-react"
 
 import { cn } from "~/libs/utils"
+import { useHerbStore } from "~/hooks/useStore"
 import {
   MenuChatIcon,
   MenuCollapseIcon,
@@ -19,9 +21,10 @@ import {
 } from "~/components/figma-icons"
 import type { SvgIconComponent } from "~/components/figma-icons"
 
+const NAV_COLLAPSED_KEY = "herb:nav-collapsed"
+
 const MENU_GROUPS: {
   label: string
-  expandable?: boolean
   items: {
     label: string
     to?: string
@@ -31,35 +34,25 @@ const MENU_GROUPS: {
 }[] = [
   {
     label: "健康顾问",
-    expandable: true,
-    items: [
-      { label: "聊天室", to: "/dashboard" },
-      { label: "消息", to: "/dashboard" },
-      { label: "未读" },
-      { label: "问诊" },
-      { label: "内部" },
-      { label: "已完成" },
-    ],
+    items: [{ label: "聊天室", to: "/dashboard" }],
   },
   {
     label: "管理",
     items: [
       {
         label: "订单管理",
-        children: [{ label: "套餐管理", to: "/packages" }],
+        children: [
+          { label: "订单列表", to: "/orders" },
+          { label: "套餐设置", to: "/packages" },
+        ],
       },
-      { label: "预约管理", disabled: true },
+      { label: "问诊管理", to: "/consultations" },
       { label: "用户管理", to: "/users" },
-      { label: "药材管理", disabled: true },
+      { label: "员工信息", to: "/employees" },
     ],
   },
   {
-    label: "管理员",
-    items: [{ label: "员工管理", to: "/employees" }],
-  },
-  {
     label: "更多",
-    expandable: true,
     items: [{ label: "个人页", disabled: true }],
   },
 ]
@@ -84,20 +77,39 @@ const renderMenuIcon = (label?: string, className?: string) => {
   return <Icon className={className} />
 }
 
+const getCollapsedGroupLabel = (label: string) => {
+  if (label.length <= 2) return label
+  return label.slice(-2)
+}
+
+const getRoleHomeLabel = (role?: number) => {
+  if (role === 3) return "医生"
+  return "健康顾问"
+}
+
 export const Navigator = () => {
   const navigate = useNavigate()
   const routerState = useRouterState()
+  const role = useHerbStore((state) => state.role)
   const activePath = routerState.location.pathname
-  const [expandedGroups, setExpandedGroups] = useState<string[]>(["健康顾问"])
   const [expandedItems, setExpandedItems] = useState<string[]>([])
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false
+    try {
+      const raw = window.localStorage?.getItem(NAV_COLLAPSED_KEY)
+      return raw === "1" || raw === "true"
+    } catch {
+      return false
+    }
+  })
 
-  const toggleGroup = (label: string) => {
-    setExpandedGroups((prev) =>
-      prev.includes(label)
-        ? prev.filter((item) => item !== label)
-        : [...prev, label]
-    )
-  }
+  useEffect(() => {
+    try {
+      window.localStorage?.setItem(NAV_COLLAPSED_KEY, collapsed ? "1" : "0")
+    } catch {
+      // ignore
+    }
+  }, [collapsed])
 
   const toggleItem = (key: string) => {
     setExpandedItems((prev) =>
@@ -106,79 +118,49 @@ export const Navigator = () => {
   }
 
   return (
-    <aside className="flex h-screen w-[232px] flex-shrink-0 flex-col border-r border-border bg-white">
+    <aside
+      className={cn(
+        "flex h-screen flex-shrink-0 flex-col border-r border-border bg-white",
+        collapsed ? "w-[72px]" : "w-[232px]"
+      )}
+    >
       {/* Logo 区域 */}
-      <div className="flex h-14 items-center border-b border-border px-6">
-        <div className="flex items-center gap-2">
+      <div
+        className={cn(
+          "flex h-14 items-center border-b border-border",
+          collapsed ? "justify-center px-0" : "px-6"
+        )}
+      >
+        <div className={cn("flex items-center gap-2", collapsed && "justify-center")}>
           <div className="flex size-7 items-center justify-center rounded-full bg-neutral-950">
             <AppIcon size={14} className="text-white" />
           </div>
-          <span className="text-[23px] font-semibold leading-none tracking-[-0.92px] text-neutral-950">
-            中医 APP
-          </span>
+          {!collapsed ? (
+            <span className="text-[23px] font-semibold leading-none tracking-[-0.92px] text-neutral-950">
+              中医 APP
+            </span>
+          ) : null}
         </div>
       </div>
 
       {/* 菜单区域 */}
       <div className="flex-1 overflow-y-auto p-2">
         {MENU_GROUPS.map((group) => {
-          const isExpanded = expandedGroups.includes(group.label)
-          const firstItem = group.items[0]
-          const restItems = group.items.slice(1)
-          const isFirstActive =
-            !!firstItem?.to && activePath === firstItem.to
-          const firstIconClassName = cn(
-            "size-5",
-            isFirstActive ? "text-brand" : "text-neutral-950/60"
-          )
-
+          const displayGroupLabel =
+            group.label === "健康顾问" ? getRoleHomeLabel(role) : group.label
           return (
             <div className="mb-1" key={group.label}>
-              <div className="px-4 pb-1 pt-4 text-xs leading-5 text-black/40">
-                {group.label}
+              <div
+                className={cn(
+                  "pb-1 pt-4 text-xs leading-5 text-black/40",
+                  collapsed ? "px-0 text-center" : "px-4"
+                )}
+              >
+                {collapsed
+                  ? getCollapsedGroupLabel(displayGroupLabel)
+                  : displayGroupLabel}
               </div>
-              {group.expandable ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(group.label)}
-                    disabled={firstItem.disabled}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded px-4 py-1.5 text-sm text-neutral-950/90 hover:bg-neutral-950/5",
-                      isFirstActive && "text-brand",
-                      firstItem.disabled && "opacity-40 cursor-not-allowed"
-                    )}
-                  >
-                    {renderMenuIcon(firstItem.label, firstIconClassName)}
-                    <span className="flex-1 text-left">{firstItem.label}</span>
-                    {isExpanded ? (
-                      <ChevronUpIcon size={16} />
-                    ) : (
-                      <ChevronDownIcon size={16} />
-                    )}
-                  </button>
-                  {isExpanded &&
-                    restItems.map((item) => {
-                      const isActive = item.to && activePath === item.to
-                      return (
-                        <button
-                          key={item.label}
-                          type="button"
-                          disabled={item.disabled}
-                          onClick={() => item.to && navigate({ to: item.to })}
-                          className={cn(
-                            "block w-full rounded px-4 py-1.5 pl-11 text-left text-sm text-neutral-950/60 hover:bg-neutral-950/5",
-                            isActive && "bg-brand-light text-brand",
-                            item.disabled && "opacity-40 cursor-not-allowed"
-                          )}
-                        >
-                          {item.label}
-                        </button>
-                      )
-                    })}
-                </>
-              ) : (
-                group.items.map((item) => {
+              {group.items.map((item) => {
                   const isChildActive =
                     item.children?.some(
                       (child) => child.to && child.to === activePath
@@ -192,36 +174,80 @@ export const Navigator = () => {
                     "size-5",
                     isActive ? "text-brand" : "text-neutral-950/60"
                   )
+
+                  const childOptions = (item.children ?? [])
+                    .filter((child) => child.to)
+                    .map((child) => ({
+                      content: child.label,
+                      value: child.to!,
+                      disabled: child.disabled,
+                    }))
+
+                  const collapsedButton = (
+                    <button
+                      type="button"
+                      title={item.label}
+                      aria-label={item.label}
+                      disabled={item.disabled}
+                      onClick={() => {
+                        if (item.to) navigate({ to: item.to })
+                      }}
+                      className={cn(
+                        "flex w-full items-center justify-center rounded py-2 text-sm text-neutral-950/60 hover:bg-neutral-950/5",
+                        isActive && "bg-brand-light text-brand",
+                        item.disabled && "opacity-40 cursor-not-allowed"
+                      )}
+                    >
+                      {renderMenuIcon(item.label, iconClassName)}
+                    </button>
+                  )
+
                   return (
                     <div key={item.label} className="space-y-1">
-                      <button
-                        type="button"
-                        disabled={item.disabled}
-                        onClick={() => {
-                          if (hasChildren) {
-                            toggleItem(itemKey)
-                            return
-                          }
-                          if (item.to) {
-                            navigate({ to: item.to })
-                          }
-                        }}
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded px-4 py-1.5 text-sm text-neutral-950/60 hover:bg-neutral-950/5",
-                          isActive && "bg-brand-light text-brand",
-                          item.disabled && "opacity-40 cursor-not-allowed"
-                        )}
-                      >
-                        {renderMenuIcon(item.label, iconClassName)}
-                        <span className="flex-1 text-left">{item.label}</span>
-                        {hasChildren ? (
-                          isItemExpanded ? (
-                            <ChevronUpIcon size={16} />
-                          ) : (
-                            <ChevronDownIcon size={16} />
-                          )
-                        ) : null}
-                      </button>
+                      {collapsed ? (
+                        hasChildren ? (
+                          <Dropdown
+                            trigger="click"
+                            options={childOptions}
+                            onClick={(dropdown) => {
+                              if (dropdown.value) navigate({ to: String(dropdown.value) })
+                            }}
+                          >
+                            {collapsedButton}
+                          </Dropdown>
+                        ) : (
+                          collapsedButton
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={item.disabled}
+                          onClick={() => {
+                            if (hasChildren) {
+                              toggleItem(itemKey)
+                              return
+                            }
+                            if (item.to) {
+                              navigate({ to: item.to })
+                            }
+                          }}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded px-4 py-1.5 text-sm text-neutral-950/60 hover:bg-neutral-950/5",
+                            isActive && "bg-brand-light text-brand",
+                            item.disabled && "opacity-40 cursor-not-allowed"
+                          )}
+                        >
+                          {renderMenuIcon(item.label, iconClassName)}
+                          <span className="flex-1 text-left">{item.label}</span>
+                          {hasChildren ? (
+                            isItemExpanded ? (
+                              <ChevronUpIcon size={16} />
+                            ) : (
+                              <ChevronDownIcon size={16} />
+                            )
+                          ) : null}
+                        </button>
+                      )}
                       {hasChildren && isItemExpanded
                         ? item.children?.map((child) => {
                             const isChildActive =
@@ -248,18 +274,24 @@ export const Navigator = () => {
                         : null}
                     </div>
                   )
-                })
-              )}
+                })}
             </div>
           )
         })}
       </div>
 
       {/* 底部操作区 */}
-      <div className="border-t border-border p-4">
+      <div
+        className={cn(
+          "flex h-14 items-center border-t border-border",
+          collapsed ? "justify-center px-0" : "px-6"
+        )}
+      >
         <button
           type="button"
           className="flex size-8 items-center justify-center rounded hover:bg-neutral-950/5"
+          aria-label={collapsed ? "展开菜单" : "收起菜单"}
+          onClick={() => setCollapsed((prev) => !prev)}
         >
           <MenuCollapseIcon className="size-4 text-neutral-950/60" />
         </button>

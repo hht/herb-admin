@@ -10,6 +10,34 @@ import { MessagePlugin } from "tdesign-react"
 import { BASE_URL } from "~/libs/constants"
 import { useHerbStore } from "./useStore"
 
+const patchJsonBigIntFields = (
+  json: string,
+  keys: readonly string[]
+): string => {
+  let patched = json
+  for (const key of keys) {
+    patched = patched.replace(
+      new RegExp(`("${key}"\\s*:\\s*)(-?\\d+)`, "g"),
+      '$1"$2"'
+    )
+  }
+  return patched
+}
+
+const parseJsonPreservingIds = (data: unknown) => {
+  if (typeof data !== "string") return data
+  const trimmed = data.trim()
+  if (!trimmed) return data
+  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return data
+
+  const patched = patchJsonBigIntFields(trimmed, ["batchNo", "userAnswerId"])
+  try {
+    return JSON.parse(patched) as unknown
+  } catch {
+    return data
+  }
+}
+
 type Response<T> =
   | {
       code?: number
@@ -27,6 +55,8 @@ export const request = async <T, U>(
     .request<T, { data: Response<T> }>({
       url: url.startsWith("http") ? url : `${BASE_URL}${url}`,
       method,
+      responseType: "text",
+      transformResponse: [(data) => parseJsonPreservingIds(data)],
       headers: {
         Authorization: `Bearer ${useHerbStore.getState().accessToken}`,
       },

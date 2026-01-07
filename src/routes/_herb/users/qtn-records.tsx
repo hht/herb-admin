@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react"
 import {
   Button,
@@ -571,8 +570,7 @@ const DetailView = ({
       return
     }
     const mainRecord = toRecord(qtnMain)
-    const batchNo =
-      typeof mainRecord.batchNo === "string" ? mainRecord.batchNo : undefined
+    const batchNo = normalizeIdString(mainRecord.batchNo)
     const consultationRecord = toRecord(detail?.consultation)
     const userAnswerId = normalizeIdString(consultationRecord.userAnswerId)
 

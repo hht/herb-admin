@@ -8,22 +8,6 @@ export interface OrderContentInput {
   content?: string
 }
 
-export interface Order {
-  orderId?: number | null
-  orderNum?: string | null
-  packageName?: string | null
-  price?: number | null
-  originalPrice?: number | null
-  disease?: string | null
-  userAnswerId?: string | null
-  userId?: number | null
-  userName?: string | null
-  status?: number | null
-  contents?: OrderContentInput[]
-  createTime?: string | null
-  updateTime?: string | null
-}
-
 export interface OrderCreateInput {
   userAnswerId: string
   packageName: string
@@ -38,6 +22,23 @@ export interface OrderCreateInput {
 export interface OrderDetailQuery {
   orderId?: number
   orderNum?: string
+}
+
+export interface OrderListQuery {
+  pageNum?: number
+  pageSize?: number
+  userName?: string
+  doctorId?: number
+  status?: number
+  beginTime?: string
+  endTime?: string
+}
+
+export interface OrderPage {
+  record: Order[]
+  total: number
+  pageNum: number
+  pageSize: number
 }
 
 const orderContentSchema: z.ZodType<OrderContentInput> = z.object({
@@ -58,28 +59,37 @@ const orderContentSchema: z.ZodType<OrderContentInput> = z.object({
     .transform((value) => value ?? undefined),
 })
 
-const orderSchema: z.ZodType<Order> = z.object({
-  orderId: z.number().nullable().optional(),
-  orderNum: z.string().nullable().optional(),
-  packageName: z.string().nullable().optional(),
-  price: z.number().nullable().optional(),
-  originalPrice: z.number().nullable().optional(),
-  disease: z.string().nullable().optional(),
-  userAnswerId: z.preprocess(
-    (value) => {
+const orderSchema = z
+  .object({
+    orderId: z.number().nullable().optional(),
+    orderNum: z.string().nullable().optional(),
+    packageName: z.string().nullable().optional(),
+    price: z.number().nullable().optional(),
+    originalPrice: z.number().nullable().optional(),
+    disease: z.string().nullable().optional(),
+    userAnswerId: z.preprocess((value) => {
       if (value === null || typeof value === "undefined") return value
       if (typeof value === "string") return value
-      if (typeof value === "number" && !Number.isNaN(value)) return String(value)
+      if (typeof value === "number" && !Number.isNaN(value))
+        return String(value)
       return value
-    },
-    z.string().nullable().optional()
-  ),
-  userId: z.number().nullable().optional(),
-  userName: z.string().nullable().optional(),
-  status: z.number().nullable().optional(),
-  contents: z.array(orderContentSchema).default([]),
-  createTime: z.string().nullable().optional(),
-  updateTime: z.string().nullable().optional(),
+    }, z.string().nullable().optional()),
+    userId: z.number().nullable().optional(),
+    userName: z.string().nullable().optional(),
+    status: z.number().nullable().optional(),
+    contents: z.array(orderContentSchema).default([]),
+    createTime: z.string().nullable().optional(),
+    updateTime: z.string().nullable().optional(),
+  })
+  .passthrough()
+
+export type Order = z.infer<typeof orderSchema>
+
+const orderPageSchema = z.object({
+  record: z.array(orderSchema).default([]),
+  total: z.number().default(0),
+  pageNum: z.number().default(1),
+  pageSize: z.number().default(20),
 })
 
 export const createOrder = async (payload: OrderCreateInput) => {
@@ -98,4 +108,73 @@ export const getAppOrderDetail = async (query: OrderDetailQuery) => {
     query
   )
   return orderSchema.parse(data)
+}
+
+export const listBackendOrders = async (
+  query: OrderListQuery
+): Promise<OrderPage> => {
+  const data = await request<OrderPage, OrderListQuery>(
+    "/backend/order/list",
+    "GET",
+    query
+  )
+  return orderPageSchema.parse(data)
+}
+
+export const getBackendOrderDetail = async (orderId: number) => {
+  const data = await request<Order, { orderId: number }>(
+    "/backend/order/detail",
+    "GET",
+    { orderId }
+  )
+  return orderSchema.parse(data)
+}
+
+export const cancelBackendOrder = async (orderId: number) => {
+  const data = await request<boolean, Record<string, never>>(
+    `/backend/order/cancel/${orderId}`,
+    "POST"
+  )
+  return z.boolean().parse(data)
+}
+
+export const deleteBackendOrder = async (orderId: number) => {
+  const data = await request<boolean, Record<string, never>>(
+    `/backend/order/delete/${orderId}`,
+    "POST"
+  )
+  return z.boolean().parse(data)
+}
+
+export const cancelAppOrder = async (orderId: number) => {
+  const data = await request<boolean, Record<string, never>>(
+    `/app/order/cancel/${orderId}`,
+    "POST"
+  )
+  return z.boolean().parse(data)
+}
+
+export const getAppPayChannels = async () => {
+  return await request<unknown, Record<string, never>>(
+    "/app/order/getPayChannel",
+    "GET"
+  )
+}
+
+const paySubmitSchema = z
+  .object({
+    orderId: z.number(),
+    channel: z.string(),
+  })
+  .passthrough()
+
+export type AppPaySubmitPayload = z.infer<typeof paySubmitSchema>
+
+export const submitAppPay = async (payload: AppPaySubmitPayload) => {
+  const parsed = paySubmitSchema.parse(payload)
+  return await request<unknown, AppPaySubmitPayload>(
+    "/app/order/pay/submit",
+    "POST",
+    parsed
+  )
 }

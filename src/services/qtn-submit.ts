@@ -14,8 +14,24 @@ const qtnAnswerSchema = z
     sort: z.number().nullable().optional(),
     required: z.number().nullable().optional(),
     step: z.number().nullable().optional(),
-    batchNo: z.string().nullable().optional(),
-    userAnswerId: z.string().nullable().optional(),
+    batchNo: z.preprocess(
+      (value) => {
+        if (value === null || typeof value === "undefined") return value
+        if (typeof value === "string") return value
+        if (typeof value === "number" && !Number.isNaN(value)) return String(value)
+        return value
+      },
+      z.string().nullable().optional()
+    ),
+    userAnswerId: z.preprocess(
+      (value) => {
+        if (value === null || typeof value === "undefined") return value
+        if (typeof value === "string") return value
+        if (typeof value === "number" && !Number.isNaN(value)) return String(value)
+        return value
+      },
+      z.string().nullable().optional()
+    ),
   })
   .passthrough()
 
@@ -23,8 +39,24 @@ export type QtnAnswerSubmitPayload = z.infer<typeof qtnAnswerSchema>
 
 const qtnSubmitAllSchema = z
   .object({
-    batchNo: z.string().nullable().optional(),
-    userAnswerId: z.string().nullable().optional(),
+    batchNo: z.preprocess(
+      (value) => {
+        if (value === null || typeof value === "undefined") return value
+        if (typeof value === "string") return value
+        if (typeof value === "number" && !Number.isNaN(value)) return String(value)
+        return value
+      },
+      z.string().nullable().optional()
+    ),
+    userAnswerId: z.preprocess(
+      (value) => {
+        if (value === null || typeof value === "undefined") return value
+        if (typeof value === "string") return value
+        if (typeof value === "number" && !Number.isNaN(value)) return String(value)
+        return value
+      },
+      z.string().nullable().optional()
+    ),
     answers: z.array(qtnAnswerSchema).default([]),
   })
   .passthrough()

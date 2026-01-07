@@ -8,7 +8,15 @@ const arrayOrEmpty = <T extends z.ZodTypeAny>(schema: T) =>
 const qtnRecordSchema = z.object({
   consultationId: z.number().nullable().optional(),
   answerId: z.number().nullable().optional(),
-  batchNo: z.string().nullable().optional(),
+  batchNo: z.preprocess(
+    (value) => {
+      if (value === null || typeof value === "undefined") return value
+      if (typeof value === "string") return value
+      if (typeof value === "number" && !Number.isNaN(value)) return String(value)
+      return value
+    },
+    z.string().nullable().optional()
+  ),
   userId: z.number().nullable().optional(),
   name: z.string().nullable().optional(),
   symptom: z.string().nullable().optional(),
@@ -42,7 +50,15 @@ const qtnQuestionSchema = z.object({
 const qtnMainSchema = z.object({
   id: z.number().nullable().optional(),
   mainId: z.number().nullable().optional(),
-  batchNo: z.string().nullable().optional(),
+  batchNo: z.preprocess(
+    (value) => {
+      if (value === null || typeof value === "undefined") return value
+      if (typeof value === "string") return value
+      if (typeof value === "number" && !Number.isNaN(value)) return String(value)
+      return value
+    },
+    z.string().nullable().optional()
+  ),
   createTime: z.string().nullable().optional(),
   step: z.number().nullable().optional(),
   type: z.number().nullable().optional(),

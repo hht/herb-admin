@@ -1,6 +1,6 @@
 import dayjs from "dayjs"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { rootStore, useConversationContext } from "easemob-chat-uikit"
+import { rootStore, useAddressContext, useConversationContext } from "easemob-chat-uikit"
 import { ChevronLeftIcon, CloseIcon, EditIcon } from "tdesign-icons-react"
 import {
   Button,
@@ -56,8 +56,11 @@ export type SidebarTab =
   | "patient-info"
   | "terminate"
 
+export type ConsultationDrawerSection = "info" | "questionnaire" | "diagnosis"
+
 interface ChatSidebarProps {
   activeTab: SidebarTab | null
+  consultationSection?: ConsultationDrawerSection
   onClose: () => void
 }
 
@@ -1415,8 +1418,10 @@ const AppointmentRecordsContent = () => {
 
 const ChatConsultationDetailContent = ({
   onClose,
+  initialSectionKey,
 }: {
   onClose: () => void
+  initialSectionKey?: ConsultationDrawerSection
 }) => {
   const sessionRole = useHerbStore((state) => state.role)
   const { currentConversation } = useConversationContext()
@@ -1521,7 +1526,7 @@ const ChatConsultationDetailContent = ({
         initialIndex: payload.initialIndex ?? 0,
       })
     },
-    []
+    [setImageViewer]
   )
 
   const tabs = useMemo(
@@ -1533,7 +1538,27 @@ const ChatConsultationDetailContent = ({
     []
   )
   const { containerRef, setSectionRef, activeKey, scrollTo } =
-    useScrollTabs(tabs)
+    useScrollTabs(tabs, { lockOnScrollToMs: 1200, hysteresis: 16 })
+
+  const initialScrollRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!initialSectionKey) return
+    if (!groupId || !detail) return
+
+    const marker = `${groupId}:${initialSectionKey}`
+    if (initialScrollRef.current === marker) return
+    initialScrollRef.current = marker
+
+    let raf = 0
+    raf = requestAnimationFrame(() => {
+      scrollTo(initialSectionKey, "auto")
+      requestAnimationFrame(() => scrollTo(initialSectionKey, "auto"))
+    })
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [detail, groupId, initialSectionKey, scrollTo])
 
   const handleSave = async () => {
     if (!consultationId) {
@@ -1948,6 +1973,7 @@ const ChatConsultationDetailContent = ({
 
 const AddAdvisorContent = () => {
   const { currentConversation } = useConversationContext()
+  const { groups, getGroupMembers } = useAddressContext()
   const groupId =
     currentConversation?.chatType === "groupChat"
       ? currentConversation.conversationId
@@ -1958,7 +1984,39 @@ const AddAdvisorContent = () => {
   const [pageNum, setPageNum] = useState(1)
   const pageSize = 10
   const [joiningId, setJoiningId] = useState<number | null>(null)
-  const [joined, setJoined] = useState<Set<number>>(() => new Set())
+  const [optimisticJoinedUsernames, setOptimisticJoinedUsernames] = useState<
+    Set<string>
+  >(() => new Set())
+
+  const memberUsernames = useMemo(() => {
+    if (!groupId) return new Set<string>()
+    const group = groups.find((item) => {
+      const idCandidates = [
+        (item as unknown as { groupid?: string }).groupid,
+        (item as unknown as { groupId?: string }).groupId,
+        (item as unknown as { id?: string }).id,
+      ].filter((value): value is string => typeof value === "string" && value.trim())
+      return idCandidates.some((value) => value === groupId)
+    })
+    const members = group?.members ?? []
+    const usernames = members
+      .map((member) =>
+        typeof member.userId === "string" ? member.userId.trim() : ""
+      )
+      .filter(Boolean)
+    return new Set(usernames)
+  }, [groupId, groups])
+
+  const joinedUsernames = useMemo(() => {
+    if (!optimisticJoinedUsernames.size) return memberUsernames
+    return new Set([...memberUsernames, ...optimisticJoinedUsernames])
+  }, [memberUsernames, optimisticJoinedUsernames])
+
+  useEffect(() => {
+    if (!groupId) return
+    setOptimisticJoinedUsernames(new Set())
+    getGroupMembers?.(groupId, false)
+  }, [getGroupMembers, groupId])
 
   useEffect(() => {
     setPageNum(1)
@@ -1992,13 +2050,18 @@ const AddAdvisorContent = () => {
       MessagePlugin.error("缺少用户ID")
       return
     }
-    if (joined.has(user.userId)) return
+    const username =
+      typeof user.username === "string" ? user.username.trim() : ""
+    if (username && joinedUsernames.has(username)) return
     setJoiningId(user.userId)
     try {
       const ok = await joinUserToGroup({ userId: user.userId, hxGroupId: groupId })
       if (ok) {
         MessagePlugin.success("已添加到群组")
-        setJoined((prev) => new Set(prev).add(user.userId as number))
+        if (username) {
+          setOptimisticJoinedUsernames((prev) => new Set(prev).add(username))
+        }
+        await getGroupMembers?.(groupId, false)
         refresh()
         return
       }
@@ -2055,29 +2118,42 @@ const AddAdvisorContent = () => {
           {users.length ? (
             users.map((user, index) => {
               const userId = user.userId ?? 0
+              const username =
+                typeof user.username === "string" ? user.username.trim() : ""
               const isOnline = user.onlineState === 1
-              const canJoin = Boolean(userId) && !joined.has(userId)
+              const isInGroup = Boolean(username) && joinedUsernames.has(username)
+              const canJoin = Boolean(userId) && !isInGroup
               const rowKey = String(
                 userId || user.username || user.num || user.nickName || index
               )
               return (
                 <div
                   key={rowKey}
-                  className="rounded border border-border bg-white px-4 py-3"
+                  className={`rounded border border-border px-4 py-3 ${
+                    isInGroup ? "bg-neutral-50" : "bg-white"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span
                           className={`inline-flex size-2 rounded-full ${
-                            isOnline ? "bg-[#2BA471]" : "bg-[#c6c6c6]"
+                            isInGroup
+                              ? "bg-[#c6c6c6]"
+                              : isOnline
+                                ? "bg-[#2BA471]"
+                                : "bg-[#c6c6c6]"
                           }`}
                         />
                         <span className="truncate text-sm font-medium text-neutral-950/90">
                           {user.nickName ?? user.username ?? "-"}
                         </span>
                       </div>
-                      <div className="mt-1 space-y-0.5 text-xs text-neutral-950/40">
+                      <div
+                        className={`mt-1 space-y-0.5 text-xs ${
+                          isInGroup ? "text-neutral-400" : "text-neutral-950/40"
+                        }`}
+                      >
                         <div className="truncate">
                           账号：{user.username ?? "-"}
                         </div>
@@ -2091,7 +2167,7 @@ const AddAdvisorContent = () => {
                       onClick={() => handleJoin(user)}
                       className="!h-8 !rounded-[3px] !px-3 !text-[14px] !leading-[22px]"
                     >
-                      {joined.has(userId) ? "已添加" : "添加"}
+                      {isInGroup ? "已添加" : "添加"}
                     </Button>
                   </div>
                 </div>
@@ -2176,7 +2252,7 @@ const OrdersDrawer = ({
       className="order-drawer"
       footer={false}
     >
-      <OrdersContent onClose={onClose} />
+      {visible ? <OrdersContent onClose={onClose} /> : null}
     </Drawer>
   )
 }
@@ -2184,9 +2260,11 @@ const OrdersDrawer = ({
 const QuestionnaireDrawer = ({
   visible,
   onClose,
+  initialSectionKey,
 }: {
   visible: boolean
   onClose: () => void
+  initialSectionKey?: ConsultationDrawerSection
 }) => {
   return (
     <Drawer
@@ -2199,42 +2277,58 @@ const QuestionnaireDrawer = ({
       className="qtn-drawer"
       footer={false}
     >
-      <ChatConsultationDetailContent onClose={onClose} />
+      {visible ? (
+        <ChatConsultationDetailContent
+          onClose={onClose}
+          initialSectionKey={initialSectionKey}
+        />
+      ) : null}
     </Drawer>
   )
 }
 
-export const ChatSidebar: FC<ChatSidebarProps> = ({ activeTab, onClose }) => {
-  if (!activeTab) return null
-  if (activeTab === "orders") {
-    return <OrdersDrawer visible onClose={onClose} />
-  }
-  if (activeTab === "questionnaire") {
-    return <QuestionnaireDrawer visible onClose={onClose} />
-  }
+export const ChatSidebar: FC<ChatSidebarProps> = ({
+  activeTab,
+  consultationSection,
+  onClose,
+}) => {
+  const showOrders = activeTab === "orders"
+  const showQuestionnaire = activeTab === "questionnaire"
+  const showPanel = Boolean(activeTab) && !showOrders && !showQuestionnaire
 
-  const ContentComponent = sidebarContent[activeTab]
+  const ContentComponent = activeTab ? sidebarContent[activeTab] : null
 
   return (
-    <div className="flex h-full w-[358px] flex-shrink-0 flex-col border-l border-border bg-white">
-      {/* 侧边栏头部 */}
-      <div className="flex h-14 items-center justify-between border-b border-border px-4">
-        <h3 className="text-base font-medium text-neutral-950/90">
-          {tabTitles[activeTab]}
-        </h3>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex size-6 items-center justify-center rounded hover:bg-neutral-950/5"
-        >
-          <CloseIcon size={16} className="text-neutral-600" />
-        </button>
-      </div>
+    <>
+      <OrdersDrawer visible={showOrders} onClose={onClose} />
+      <QuestionnaireDrawer
+        visible={showQuestionnaire}
+        onClose={onClose}
+        initialSectionKey={consultationSection}
+      />
 
-      {/* 侧边栏内容 */}
-      <div className="flex-1 overflow-y-auto bg-neutral-50">
-        <ContentComponent />
-      </div>
-    </div>
+      {showPanel && ContentComponent ? (
+        <div className="flex h-full w-[358px] flex-shrink-0 flex-col border-l border-border bg-white">
+          {/* 侧边栏头部 */}
+          <div className="flex h-14 items-center justify-between border-b border-border px-4">
+            <h3 className="text-base font-medium text-neutral-950/90">
+              {activeTab ? tabTitles[activeTab] : ""}
+            </h3>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex size-6 items-center justify-center rounded hover:bg-neutral-950/5"
+            >
+              <CloseIcon size={16} className="text-neutral-600" />
+            </button>
+          </div>
+
+          {/* 侧边栏内容 */}
+          <div className="flex-1 overflow-y-auto bg-neutral-50">
+            <ContentComponent />
+          </div>
+        </div>
+      ) : null}
+    </>
   )
 }

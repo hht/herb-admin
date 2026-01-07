@@ -10,30 +10,59 @@ import {
   type CallKitProps,
   type MessageRenderContext,
 } from "easemob-chat-uikit"
-import { useEffect, useMemo, useState } from "react"
-import { ChatSidebar, type SidebarTab } from "~/components/chat-sidebar"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { ArticleIcon, CalendarIcon, UserAddIcon } from "tdesign-icons-react"
+import {
+  ChatSidebar,
+  type ConsultationDrawerSection,
+  type SidebarTab,
+} from "~/components/chat-sidebar"
 import {
   OrderCustomMessage,
-  isOrderCustomMessage,
 } from "~/components/chat/order-custom-message"
+import { isOrderCustomMessage } from "~/components/chat/order-custom-message-utils"
 import { cn } from "~/libs/utils"
 import { fetchChatUserProfilesByUserIds } from "~/services/chat-user-profiles"
 import { useOrderStore } from "~/stores/order-store"
 
-const TABS: { label: string; value: SidebarTab }[] = [
-  { label: "问卷", value: "questionnaire" },
-  { label: "创建订单", value: "orders" },
-  { label: "预约问诊/回诊", value: "appointments" },
-  { label: "预约记录", value: "appointment-records" },
-  { label: "添加健康顾问/医生", value: "add-advisor" },
-  { label: "病人信息", value: "patient-info" },
-  { label: "终止/回绝", value: "terminate" },
+type ChatOperateItem = {
+  label: string
+  tab: SidebarTab
+  icon: ReactNode
+  consultationSection?: ConsultationDrawerSection
+}
+
+const CHAT_OPERATIONS: ChatOperateItem[] = [
+  {
+    label: "问卷",
+    tab: "questionnaire",
+    consultationSection: "questionnaire",
+    icon: <ArticleIcon size="16px" />,
+  },
+  {
+    label: "创建订单",
+    tab: "orders",
+    icon: <CalendarIcon size="16px" />,
+  },
+  {
+    label: "问诊记录",
+    tab: "questionnaire",
+    consultationSection: "info",
+    icon: <ArticleIcon size="16px" />,
+  },
+  {
+    label: "添加健康顾问/医生",
+    tab: "add-advisor",
+    icon: <UserAddIcon size="16px" />,
+  },
 ]
 
 const ChatWorkspace = () => {
   const client = useClient()
   const { currentConversation } = useConversationContext()
   const [activeTab, setActiveTab] = useState<SidebarTab | null>(null)
+  const [consultationSection, setConsultationSection] =
+    useState<ConsultationDrawerSection>("info")
   const hasConversation = Boolean(currentConversation?.conversationId)
 
   useEffect(() => {
@@ -67,15 +96,43 @@ const ChatWorkspace = () => {
     [client]
   )
 
-  const handleTabClick = (tabValue: SidebarTab) => {
-    if (activeTab === tabValue) {
-      setActiveTab(null)
-    } else {
-      if (tabValue === "orders") {
-        useOrderStore.getState().reset()
+  const isOperationActive = (operation: ChatOperateItem) => {
+    if (operation.tab !== activeTab) return false
+    if (operation.tab !== "questionnaire") return true
+    return (
+      operation.consultationSection === undefined ||
+      operation.consultationSection === consultationSection
+    )
+  }
+
+  const handleOperateClick = (operation: ChatOperateItem) => {
+    if (operation.tab === "questionnaire") {
+      const nextSection = operation.consultationSection ?? "info"
+
+      if (activeTab !== "questionnaire") {
+        setConsultationSection(nextSection)
+        setActiveTab("questionnaire")
+        return
       }
-      setActiveTab(tabValue)
+
+      if (consultationSection === nextSection) {
+        setActiveTab(null)
+        return
+      }
+
+      setConsultationSection(nextSection)
+      return
     }
+
+    if (activeTab === operation.tab) {
+      setActiveTab(null)
+      return
+    }
+
+    if (operation.tab === "orders") {
+      useOrderStore.getState().reset()
+    }
+    setActiveTab(operation.tab)
   }
 
   const messageListProps = useMemo(() => {
@@ -151,24 +208,44 @@ const ChatWorkspace = () => {
       <div className="flex flex-1 flex-col bg-neutral-50">
         {/* 自定义聊天头部 */}
         {hasConversation ? (
-          <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border bg-white px-4">
-            {/* 中间选项卡 */}
-            <div className="flex items-center gap-1">
-              {TABS.map((tab) => (
-                <button
-                  key={tab.value}
-                  type="button"
-                  onClick={() => handleTabClick(tab.value)}
-                  className={cn(
-                    "rounded px-2 py-1 text-xs transition-colors",
-                    activeTab === tab.value
-                      ? "bg-brand-light text-brand"
-                      : "text-neutral-950/60 hover:bg-neutral-950/5 hover:text-neutral-950/90"
-                  )}
-                >
-                  {tab.label}
-                </button>
-              ))}
+          <div className="flex h-12 flex-shrink-0 items-start border-b border-[#e7e7e7] bg-white">
+            <div className="flex items-start pl-10">
+              {CHAT_OPERATIONS.map((operation) => {
+                const active = isOperationActive(operation)
+                return (
+                  <button
+                    key={`${operation.tab}-${operation.label}`}
+                    type="button"
+                    onClick={() => handleOperateClick(operation)}
+                    aria-selected={active}
+                    className={cn(
+                      "bg-white p-2 transition-colors",
+                      active
+                        ? "border-b-[3px] border-brand"
+                        : "border-b-[3px] border-transparent hover:border-neutral-950/10"
+                    )}
+                  >
+                    <span className="flex items-center gap-2 rounded-[3px] bg-white px-2 py-[5px]">
+                      <span
+                        className={cn(
+                          "inline-flex size-4 items-center justify-center",
+                          active ? "text-brand" : "text-neutral-950"
+                        )}
+                      >
+                        {operation.icon}
+                      </span>
+                      <span
+                        className={cn(
+                          "text-sm leading-[22px]",
+                          active ? "text-brand" : "text-neutral-950/60"
+                        )}
+                      >
+                        {operation.label}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         ) : null}
@@ -186,6 +263,7 @@ const ChatWorkspace = () => {
           {/* 侧边栏 */}
           <ChatSidebar
             activeTab={activeTab}
+            consultationSection={consultationSection}
             onClose={() => setActiveTab(null)}
           />
         </div>

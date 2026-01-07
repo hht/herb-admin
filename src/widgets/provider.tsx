@@ -169,11 +169,20 @@ const EasemobAfterLoginBootstrap = () => {
           )
 
         if (!cancelled && conversations.length) {
-          rootStore.conversationStore.setConversation(conversations as any)
-          rootStore.addressStore.getSilentModeForConversations(conversations as any)
+          type ConversationPayload = Parameters<
+            typeof rootStore.conversationStore.setConversation
+          >[0]
+          const payload = conversations as unknown as ConversationPayload
+          rootStore.conversationStore.setConversation(payload)
+          rootStore.addressStore.getSilentModeForConversations(
+            payload as unknown as Parameters<
+              typeof rootStore.addressStore.getSilentModeForConversations
+            >[0]
+          )
         }
 
       } catch (error) {
+        console.log("easemob bootstrap conversation failed:", error)
       }
 
       try {
@@ -197,7 +206,7 @@ const EasemobAfterLoginBootstrap = () => {
         }
 
         if (!cancelled) {
-          setGroups(merged as any)
+          setGroups(merged as unknown as Parameters<typeof setGroups>[0])
           rootStore.addressStore.setHasGroupsNext(hasNext)
 
           // ConversationList 默认只展示 conversationStore 里的会话。
@@ -227,11 +236,20 @@ const EasemobAfterLoginBootstrap = () => {
             .filter((c): c is NonNullable<typeof c> => Boolean(c))
 
           if (groupConversationsToAdd.length) {
-            rootStore.conversationStore.setConversation(groupConversationsToAdd as any)
-            rootStore.addressStore.getSilentModeForConversations(groupConversationsToAdd as any)
+            type ConversationPayload = Parameters<
+              typeof rootStore.conversationStore.setConversation
+            >[0]
+            const payload = groupConversationsToAdd as unknown as ConversationPayload
+            rootStore.conversationStore.setConversation(payload)
+            rootStore.addressStore.getSilentModeForConversations(
+              payload as unknown as Parameters<
+                typeof rootStore.addressStore.getSilentModeForConversations
+              >[0]
+            )
           }
         }
       } catch (error) {
+        console.log("easemob bootstrap groups failed:", error)
       }
     }
 
@@ -240,7 +258,7 @@ const EasemobAfterLoginBootstrap = () => {
     return () => {
       cancelled = true
     }
-  }, [client, hxUserName, hxUuid])
+  }, [client, hxUserName, hxUuid, setGroups])
 
   return null
 }
@@ -311,7 +329,7 @@ const EasemobUserProfileSync = () => {
           Record<string, unknown>
         >),
         ...patch,
-      } as any)
+      } as unknown as Parameters<typeof setAppUserInfo>[0])
     }
 
     const run = async () => {
@@ -336,15 +354,16 @@ const EasemobUserProfileSync = () => {
         }
       }
 
-      if (currentConversation?.chatType === "groupChat" && currentConversation.conversationId) {
-        const groupId = currentConversation.conversationId
-        try {
-          await getGroupMembers?.(groupId, false)
-        } catch {
-        }
-        const group = rootStore.addressStore.groups.find((item) => item.groupid === groupId)
-        const memberIds =
-          group?.members?.map((member) => member.userId).filter(Boolean) ?? []
+        if (currentConversation?.chatType === "groupChat" && currentConversation.conversationId) {
+          const groupId = currentConversation.conversationId
+          try {
+            await getGroupMembers?.(groupId, false)
+          } catch (error) {
+            debug("getGroupMembers failed", { groupId, error })
+          }
+          const group = rootStore.addressStore.groups.find((item) => item.groupid === groupId)
+          const memberIds =
+            group?.members?.map((member) => member.userId).filter(Boolean) ?? []
 
         for (const memberId of memberIds.slice(0, 50)) {
           if (typeof memberId === "string" && memberId.trim()) ids.add(memberId.trim())
@@ -429,7 +448,8 @@ const EasemobUserProfileSync = () => {
               }
               if (avatarurl) payload.avatarurl = avatarurl
               await typedClient.updateUserInfo(payload)
-            } catch {
+            } catch (error) {
+              debug("updateUserInfo failed", { error })
             }
           }
         }
@@ -467,7 +487,10 @@ const EasemobUserProfileSync = () => {
     client,
     currentConversation?.chatType,
     currentConversation?.conversationId,
+    conversationList,
     conversationSignature,
+    getGroupMembers,
+    setAppUserInfo,
   ])
 
   return null

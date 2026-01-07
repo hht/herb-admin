@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Dialog } from "tdesign-react"
 
@@ -51,17 +53,18 @@ export const ImageViewerDialog = ({
   initialIndex?: number
   onClose: () => void
 }) => {
-  const [activeIndex, setActiveIndex] = useState(0)
-  useEffect(() => {
-    if (!visible) return
-    const next = initialIndex ?? 0
-    setActiveIndex(Math.max(0, Math.min(next, Math.max(0, images.length - 1))))
-  }, [images.length, initialIndex, visible])
+  const safeInitialIndex = Math.max(
+    0,
+    Math.min(initialIndex ?? 0, Math.max(0, images.length - 1))
+  )
+  const dialogKey = `${visible ? 1 : 0}:${safeInitialIndex}:${images.join("|")}`
+  const [activeIndex, setActiveIndex] = useState(() => safeInitialIndex)
 
   const current = images[activeIndex]
 
   return (
     <Dialog
+      key={dialogKey}
       header={title || "查看图片"}
       visible={visible}
       placement="center"
@@ -617,14 +620,25 @@ export const formatQuestionAnswer = (
 
 export const useScrollTabs = (
   tabs: Array<{ key: string; label: string }>,
-  options?: { scrollOffset?: number; activeOffset?: number }
+  options?: {
+    scrollOffset?: number
+    activeOffset?: number
+    lockOnScrollToMs?: number
+    hysteresis?: number
+  }
 ) => {
   const scrollOffset = options?.scrollOffset ?? 72
   const activeOffset = options?.activeOffset ?? 88
+  const lockOnScrollToMs = options?.lockOnScrollToMs ?? 0
+  const hysteresis = options?.hysteresis ?? 0
   const containerRef = useRef<HTMLDivElement | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [activeKey, setActiveKey] = useState(tabs[0]?.key ?? "")
   const activeRef = useRef(activeKey)
+  const lastScrollTopRef = useRef(0)
+  const lockUntilRef = useRef(0)
+  const lockedKeyRef = useRef<string | null>(null)
+  const lockedScrollTopRef = useRef<number | null>(null)
 
   useEffect(() => {
     activeRef.current = activeKey
@@ -637,16 +651,28 @@ export const useScrollTabs = (
   }, [])
 
   const scrollTo = useCallback(
-    (key: string) => {
+    (key: string, behavior: ScrollBehavior = "smooth") => {
       const container = containerRef.current
       const node = sectionRefs.current[key]
       if (!container || !node) return
       const top =
         node.getBoundingClientRect().top - container.getBoundingClientRect().top
-      container.scrollTo({ top: container.scrollTop + top - scrollOffset, behavior: "smooth" })
+      const targetTop = container.scrollTop + top - scrollOffset
+
+      if (behavior === "smooth" && lockOnScrollToMs > 0) {
+        lockUntilRef.current = Date.now() + lockOnScrollToMs
+        lockedKeyRef.current = key
+        lockedScrollTopRef.current = targetTop
+      } else {
+        lockUntilRef.current = 0
+        lockedKeyRef.current = null
+        lockedScrollTopRef.current = null
+      }
+
+      container.scrollTo({ top: targetTop, behavior })
       setActiveKey(key)
     },
-    [scrollOffset]
+    [lockOnScrollToMs, scrollOffset]
   )
 
   useEffect(() => {
@@ -654,16 +680,67 @@ export const useScrollTabs = (
     if (!container) return
     let raf = 0
     const update = () => {
+      const now = Date.now()
+      const lockedKey = lockedKeyRef.current
+      const lockedTop = lockedScrollTopRef.current
+      if (lockedKey && lockUntilRef.current && now < lockUntilRef.current) {
+        if (typeof lockedTop === "number") {
+          if (Math.abs(container.scrollTop - lockedTop) <= 1) {
+            lockUntilRef.current = 0
+            lockedKeyRef.current = null
+            lockedScrollTopRef.current = null
+          } else if (lockedKey !== activeRef.current) {
+            setActiveKey(lockedKey)
+            return
+          } else {
+            return
+          }
+        } else if (lockedKey !== activeRef.current) {
+          setActiveKey(lockedKey)
+          return
+        } else {
+          return
+        }
+      }
+
       const containerTop = container.getBoundingClientRect().top
+      const prevScrollTop = lastScrollTopRef.current
+      const currentScrollTop = container.scrollTop
+      const direction =
+        currentScrollTop >= prevScrollTop ? "down" : "up"
+      lastScrollTopRef.current = currentScrollTop
+
       let current = tabs[0]?.key ?? ""
+      let currentTop: number | null = null
       tabs.forEach((tab) => {
         const node = sectionRefs.current[tab.key]
         if (!node) return
         const top = node.getBoundingClientRect().top - containerTop
         if (top <= activeOffset) {
           current = tab.key
+          currentTop = top
         }
       })
+
+      if (!current || current === activeRef.current) {
+        return
+      }
+
+      if (hysteresis > 0) {
+        const activeNode = sectionRefs.current[activeRef.current]
+        const activeTop = activeNode
+          ? activeNode.getBoundingClientRect().top - containerTop
+          : null
+
+        if (direction === "down") {
+          if (currentTop !== null && currentTop > activeOffset - hysteresis) {
+            return
+          }
+        } else if (activeTop !== null && activeTop <= activeOffset + hysteresis) {
+          return
+        }
+      }
+
       if (current && current !== activeRef.current) {
         setActiveKey(current)
       }
@@ -678,8 +755,7 @@ export const useScrollTabs = (
       if (raf) cancelAnimationFrame(raf)
       container.removeEventListener("scroll", onScroll)
     }
-  }, [activeOffset, tabs])
+  }, [activeOffset, hysteresis, tabs])
 
   return { containerRef, setSectionRef, activeKey, scrollTo }
 }
-
