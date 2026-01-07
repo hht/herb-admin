@@ -214,7 +214,7 @@ export const OrderDetailDrawer = ({
   )
 
   const { region, detailAddress, receiverName, receiverPhone } =
-    resolveShippingInfo(order)
+    resolveShippingInfo(order ?? null)
 
   const serviceItems = (order?.contents ?? []).map((item, index) => ({
     label: buildServiceLabel(item.title, index),
@@ -266,7 +266,7 @@ export const OrderDetailDrawer = ({
                         {getText(order?.userName, record.username)}
                       </InfoRow>
                       <InfoRow label="病患姓名">
-                        {resolvePatientName(order)}
+                        {resolvePatientName(order ?? null)}
                       </InfoRow>
                       <InfoRow label="订单状态">
                         <span className="flex items-center gap-2">
@@ -285,7 +285,7 @@ export const OrderDetailDrawer = ({
                         {formatDateTime(order?.createTime ?? null)}
                       </InfoRow>
                       <InfoRow label="问诊医生" labelWidthClassName="w-[120px]">
-                        {resolveDoctorName(order)}
+                        {resolveDoctorName(order ?? null)}
                       </InfoRow>
                       <InfoRow label="病种类型" labelWidthClassName="w-[120px]">
                         {getText(order?.disease, record.diseaseName)}

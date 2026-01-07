@@ -243,7 +243,7 @@ const OrdersContent: FC<OrdersContentProps> = ({ onClose }) => {
   const diseaseOptions = useMemo(() => {
     const options = templates
       .map((item) => item.disease)
-      .filter((item): item is string => !!item && item.trim())
+      .filter((item): item is string => Boolean(item && item.trim()))
     const unique = Array.from(new Set(options))
     return unique.map((item) => ({ label: item, value: item }))
   }, [templates])
@@ -259,8 +259,8 @@ const OrdersContent: FC<OrdersContentProps> = ({ onClose }) => {
     return String(priceValue)
   }, [priceValue, templatePrice])
 
-  const handleTemplateChange = (value: number | string) => {
-    if (value === null || value === undefined || value === "") {
+  const handleTemplateChange = (value: unknown) => {
+    if (typeof value !== "string" && typeof value !== "number") {
       setState({
         contents: [createEmptyOrderContent(0)],
         createdOrder: null,
@@ -447,6 +447,7 @@ const OrdersContent: FC<OrdersContentProps> = ({ onClose }) => {
           result.push({
             title: stepTitle,
             type: 10,
+            options: [],
             tips1:
               typeof stepRecord.tips1 === "string"
                 ? stepRecord.tips1
@@ -774,7 +775,7 @@ const OrdersContent: FC<OrdersContentProps> = ({ onClose }) => {
     ])
     const sanitizeTips = (tips: Array<string | null | undefined>) =>
       tips
-        .filter((item): item is string => !!item && item.trim())
+        .filter((item): item is string => Boolean(item && item.trim()))
         .map((item) => item.trim())
         .filter((item) => !hiddenTips.has(item))
     const sections: Array<{
@@ -819,7 +820,10 @@ const OrdersContent: FC<OrdersContentProps> = ({ onClose }) => {
         const stepQuestions = Array.isArray(stepRecord.questions)
           ? (stepRecord.questions as QtnQuestion[])
           : []
-        const stepTips = sanitizeTips([stepRecord.tips1, stepRecord.tips2])
+        const stepTips = sanitizeTips([
+          typeof stepRecord.tips1 === "string" ? stepRecord.tips1 : undefined,
+          typeof stepRecord.tips2 === "string" ? stepRecord.tips2 : undefined,
+        ])
         if (!stepQuestions.length) return
         buildSections(stepQuestions, `step-${stepIndex}`, stepTips)
       })
@@ -1495,7 +1499,7 @@ const ChatConsultationDetailContent = ({
     title: string
     images: string[]
     initialIndex: number
-  }>({ visible: false, title: "", images: [] })
+  }>({ visible: false, title: "", images: [], initialIndex: 0 })
 
   const [draftMsgs, setDraftMsgs] = useState<{
     advisorMsg?: string
@@ -1995,7 +1999,9 @@ const AddAdvisorContent = () => {
         (item as unknown as { groupid?: string }).groupid,
         (item as unknown as { groupId?: string }).groupId,
         (item as unknown as { id?: string }).id,
-      ].filter((value): value is string => typeof value === "string" && value.trim())
+      ].filter(
+        (value): value is string => typeof value === "string" && Boolean(value.trim())
+      )
       return idCandidates.some((value) => value === groupId)
     })
     const members = group?.members ?? []

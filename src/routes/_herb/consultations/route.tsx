@@ -171,16 +171,16 @@ function ConsultationManagement() {
             >
               查看详情
             </Button>
-            <Dropdown
-              trigger="click"
-              options={items}
-              onClick={(item) => {
-                if (item.value === "delete") confirmDelete(row)
-              }}
-            >
-              <Button theme="default" variant="text" shape="square">
-                <MoreIcon />
-              </Button>
+              <Dropdown
+                trigger="click"
+                options={items}
+                onClick={(item) => {
+                if (item.value === "delete") confirmDelete()
+                }}
+              >
+                <Button theme="default" variant="text" shape="square">
+                  <MoreIcon />
+                </Button>
             </Dropdown>
           </div>
         )
@@ -248,7 +248,7 @@ function ConsultationManagement() {
             <Table
               data={records}
               columns={columns}
-              rowKey={(row) => String(row.consultationId ?? row.consultationNo ?? "")}
+              rowKey="consultationId"
               bordered
               hover
               stripe

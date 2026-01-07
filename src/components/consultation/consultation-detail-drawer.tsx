@@ -75,7 +75,7 @@ export const ConsultationDetailDrawer = ({
   initialSectionKey?: ConsultationDetailDrawerSection
   onClose: () => void
 }) => {
-  const { data: detail, loading } = useRequest<ConsultationDetail | null>(
+  const { data: detail, loading } = useRequest<ConsultationDetail | null, []>(
     () =>
       visible && consultationId
         ? getConsultationDetailById(consultationId)

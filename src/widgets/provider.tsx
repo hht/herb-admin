@@ -354,16 +354,31 @@ const EasemobUserProfileSync = () => {
         }
       }
 
-        if (currentConversation?.chatType === "groupChat" && currentConversation.conversationId) {
-          const groupId = currentConversation.conversationId
-          try {
-            await getGroupMembers?.(groupId, false)
-          } catch (error) {
-            debug("getGroupMembers failed", { groupId, error })
-          }
-          const group = rootStore.addressStore.groups.find((item) => item.groupid === groupId)
-          const memberIds =
-            group?.members?.map((member) => member.userId).filter(Boolean) ?? []
+      const resolveGroupId = (value: unknown) => {
+        if (!value || typeof value !== "object") return undefined
+        const record = value as Record<string, unknown>
+        const idCandidates = [record.groupid, record.groupId, record.id]
+        for (const candidate of idCandidates) {
+          if (typeof candidate === "string" && candidate.trim()) return candidate.trim()
+        }
+        return undefined
+      }
+
+      if (
+        currentConversation?.chatType === "groupChat" &&
+        currentConversation.conversationId
+      ) {
+        const groupId = currentConversation.conversationId
+        try {
+          await getGroupMembers?.(groupId, false)
+        } catch (error) {
+          debug("getGroupMembers failed", { groupId, error })
+        }
+        const group = rootStore.addressStore.groups.find(
+          (item) => resolveGroupId(item) === groupId
+        )
+        const memberIds =
+          group?.members?.map((member) => member.userId).filter(Boolean) ?? []
 
         for (const memberId of memberIds.slice(0, 50)) {
           if (typeof memberId === "string" && memberId.trim()) ids.add(memberId.trim())

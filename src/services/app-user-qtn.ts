@@ -33,6 +33,7 @@ const qtnOptionSchema = z.object({
 })
 
 const qtnQuestionSchema = z.object({
+  mainId: z.number().nullable().optional(),
   questionId: z.number().nullable().optional(),
   sort: z.number().nullable().optional(),
   title: z.string().nullable().optional(),
@@ -44,8 +45,9 @@ const qtnQuestionSchema = z.object({
   profileField: z.string().nullable().optional(),
   unit: z.string().nullable().optional(),
   other: z.string().nullable().optional(),
+  required: z.number().nullable().optional(),
   options: arrayOrEmpty(qtnOptionSchema),
-})
+}).passthrough()
 
 const qtnMainSchema = z.object({
   id: z.number().nullable().optional(),

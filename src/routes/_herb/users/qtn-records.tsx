@@ -51,6 +51,7 @@ import {
 } from "~/components/qtn/qtn-detail"
 import qtnUserBusinessSvg from "~/assets/figma/qtn-user-business.svg?raw"
 import qtnInfoSvg from "~/assets/figma/qtn-info.svg?raw"
+import type { QtnAnswerSubmitPayload, QtnSubmitAllPayload } from "~/services/qtn-submit"
 import { submitQtnAll, submitQtnAnswer } from "~/services/qtn-submit"
 
 const MAX_COMPARE_COUNT = 3
@@ -523,7 +524,7 @@ const DetailView = ({
         initialIndex: payload.initialIndex ?? 0,
       })
     },
-    []
+    [setImageViewer]
   )
 
   const [isEditing, setIsEditing] = useState(false)
@@ -595,7 +596,7 @@ const DetailView = ({
     }
 
     const answers = changes
-      .map(({ question, next }) => {
+      .map(({ question, next }): QtnAnswerSubmitPayload | null => {
         if (!question.questionId) return null
         const questionId = Number(question.questionId)
         if (Number.isNaN(questionId)) return null
@@ -615,20 +616,19 @@ const DetailView = ({
           userAnswerId,
         }
       })
-      .filter(Boolean) as Array<Record<string, unknown>>
+      .filter((item): item is QtnAnswerSubmitPayload => Boolean(item))
 
     try {
-      await runSubmitAll({
+      const payload: QtnSubmitAllPayload = {
         batchNo,
         userAnswerId,
         answers,
-      } as Record<string, unknown>)
+      }
+      await runSubmitAll(payload)
     } catch (error) {
       console.log("submitAll failed, fallback submit one by one:", error)
       const results = await Promise.allSettled(
-        answers.map((payload) =>
-          runSubmitOne(payload as Record<string, unknown>)
-        )
+        answers.map((payload) => runSubmitOne(payload))
       )
       const failed = results.filter((item) => item.status === "rejected")
       if (failed.length) {
@@ -1305,7 +1305,7 @@ export const QtnRecordsDrawer = ({
             colKey: "select",
             title: "对比",
             width: 120,
-            fixed: "right",
+            fixed: "right" as const,
             cell: ({ row }: { row: QtnRecord }) => (
               <Checkbox
                 checked={selected.some(
@@ -1323,7 +1323,7 @@ export const QtnRecordsDrawer = ({
             colKey: "actions",
             title: "操作",
             width: 140,
-            fixed: "right",
+            fixed: "right" as const,
             cell: ({ row }: { row: QtnRecord }) => (
               <div className="flex items-center gap-3">
                 <Button

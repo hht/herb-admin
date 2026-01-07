@@ -1,9 +1,11 @@
+import type { ReactElement } from "react"
+
 export interface SvgIconProps {
   className?: string
 }
 
 export interface SvgIconComponent {
-  (props: SvgIconProps): JSX.Element
+  (props: SvgIconProps): ReactElement
 }
 
 export function MenuChatIcon({ className }: SvgIconProps) {

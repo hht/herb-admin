@@ -240,6 +240,8 @@ const UserManagement = () => {
       MessagePlugin.error("缺少用户信息，无法删除")
       return
     }
+    const userId = user.userId
+    const username = user.username
     const dialog = DialogPlugin.confirm({
       header: "确认删除",
       body: `确定删除用户${user.nickName ?? user.username ?? ""}吗？`,
@@ -249,8 +251,8 @@ const UserManagement = () => {
         dialog.setConfirmLoading(true)
         try {
           await runUpdate({
-            userId: user.userId,
-            username: user.username,
+            userId,
+            username,
             areaCode: user.areaCode ?? "86",
             status: "0",
             role: user.role ?? "5",
