@@ -22,3 +22,10 @@ export const editConsultation = async (payload: ConsultationEditPayload) => {
   return z.boolean().parse(data)
 }
 
+export const deleteConsultation = async (consultationId: number) => {
+  const data = await request<boolean, Record<string, never>>(
+    `/backend/consultation/delete/${consultationId}`,
+    "POST"
+  )
+  return z.boolean().parse(data)
+}

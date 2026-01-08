@@ -46,8 +46,7 @@ const CHAT_OPERATIONS: ChatOperateItem[] = [
   },
   {
     label: "问诊记录",
-    tab: "questionnaire",
-    consultationSection: "info",
+    tab: "qtn-records",
     icon: <ArticleIcon size="16px" />,
   },
   {

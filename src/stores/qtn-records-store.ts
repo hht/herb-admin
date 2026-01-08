@@ -18,7 +18,7 @@ interface QtnRecordsStoreState {
   activeRecord: QtnRecord | null
   detailData: ConsultationDetail | null
   compareData: ConsultationDetail[]
-  symptomFilter: string
+  patientFilter: string
 }
 
 interface QtnRecordsStoreActions {
@@ -40,7 +40,7 @@ const initialState: QtnRecordsStoreState = {
   activeRecord: null,
   detailData: null,
   compareData: [],
-  symptomFilter: "全部症状",
+  patientFilter: "全部病患",
 }
 
 export const useQtnRecordsStore =

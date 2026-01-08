@@ -131,6 +131,12 @@ export interface QtnRecordQuery {
   pageSize?: number
 }
 
+export interface QtnRecordGroupQuery {
+  groupId: string
+  pageNum?: number
+  pageSize?: number
+}
+
 const getString = (...values: unknown[]) => {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) return value
@@ -220,6 +226,21 @@ export const listAppUserQtn = async (
     z.infer<typeof listPageSchema>,
     QtnRecordQuery
   >("/backend/consultation/listByUser", "GET", params)
+  const parsed = listPageSchema.parse(data)
+  const record = parsed.record.map(toRecord)
+  return pageSchema.parse({
+    ...parsed,
+    record,
+  })
+}
+
+export const listConsultationQtnByGroupId = async (
+  params: QtnRecordGroupQuery
+): Promise<QtnRecordPage> => {
+  const data = await request<
+    z.infer<typeof listPageSchema>,
+    QtnRecordGroupQuery
+  >("/backend/consultation/listByGroupId", "GET", params)
   const parsed = listPageSchema.parse(data)
   const record = parsed.record.map(toRecord)
   return pageSchema.parse({

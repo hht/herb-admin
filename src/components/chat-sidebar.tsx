@@ -30,8 +30,11 @@ import {
   ImageViewerDialog,
   TableBlock,
   TruncatedText,
-  useScrollTabs,
 } from "~/components/qtn/qtn-detail"
+import {
+  ConsultationTabsBar,
+  useConsultationScrollTabs,
+} from "~/components/qtn/consultation-scroll-tabs"
 import {
   listHealthTemplates,
   type HealthContentInput,
@@ -46,10 +49,12 @@ import {
 import { listEmployees, type Employee } from "~/services/employees"
 import { joinUserToGroup } from "~/services/chat-groups"
 import { editConsultation, type ConsultationEditPayload } from "~/services/consultations"
+import { QtnRecordsDrawer } from "~/components/qtn/qtn-records-drawer"
 
 export type SidebarTab =
   | "questionnaire"
   | "orders"
+  | "qtn-records"
   | "appointments"
   | "appointment-records"
   | "add-advisor"
@@ -67,6 +72,7 @@ interface ChatSidebarProps {
 const tabTitles: Record<SidebarTab, string> = {
   questionnaire: "问卷",
   orders: "创建订单",
+  "qtn-records": "问诊记录",
   appointments: "预约问诊/回诊",
   "appointment-records": "预约记录",
   "add-advisor": "添加健康顾问/医生",
@@ -1511,36 +1517,17 @@ const ChatConsultationDetailContent = ({
     [setImageViewer]
   )
 
-  const tabs = useMemo(
-    () => [
-      { key: "info", label: "问诊信息" },
-      { key: "questionnaire", label: "患者问卷" },
-      { key: "diagnosis", label: "诊断报告" },
-    ],
-    []
-  )
+  const scrollMarker =
+    groupId && detail
+      ? `${groupId}:${consultationId ?? "unknown"}:${initialSectionKey ?? ""}`
+      : null
+
   const { containerRef, setSectionRef, activeKey, scrollTo } =
-    useScrollTabs(tabs, { lockOnScrollToMs: 1200, hysteresis: 16 })
-
-  const initialScrollRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (!initialSectionKey) return
-    if (!groupId || !detail) return
-
-    const marker = `${groupId}:${initialSectionKey}`
-    if (initialScrollRef.current === marker) return
-    initialScrollRef.current = marker
-
-    let raf = 0
-    raf = requestAnimationFrame(() => {
-      scrollTo(initialSectionKey, "auto")
-      requestAnimationFrame(() => scrollTo(initialSectionKey, "auto"))
+    useConsultationScrollTabs({
+      enabled: Boolean(groupId && detail),
+      initialSectionKey,
+      marker: scrollMarker,
     })
-    return () => {
-      if (raf) cancelAnimationFrame(raf)
-    }
-  }, [detail, groupId, initialSectionKey, scrollTo])
 
   const handleSave = async () => {
     if (!consultationId) {
@@ -1649,34 +1636,11 @@ const ChatConsultationDetailContent = ({
         </button>
       </div>
 
-      <div className="border-b border-[#e7e7e7] bg-white px-12">
-        <div className="flex h-12 items-center gap-6 text-[14px] leading-[22px]">
-          {tabs.map((tab) => {
-            const isActive = tab.key === activeKey
-            const isEnabled = Boolean(groupId && detail)
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                className={`relative flex h-full items-center ${
-                  isActive ? "text-brand" : "text-[rgba(0,0,0,0.6)]"
-                }`}
-                onClick={() => {
-                  if (!isEnabled) return
-                  scrollTo(tab.key)
-                }}
-              >
-                {tab.label}
-                <span
-                  className={`absolute bottom-0 left-0 h-[2px] w-full rounded-full ${
-                    isActive ? "bg-brand" : "bg-transparent"
-                  }`}
-                />
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <ConsultationTabsBar
+        activeKey={activeKey}
+        enabled={Boolean(groupId && detail)}
+        onSelect={(key) => scrollTo(key)}
+      />
 
       <div className="min-h-0 flex-1">
         <Loading loading={loading} className="h-full">
@@ -2194,6 +2158,7 @@ const TerminateContent = () => {
 const sidebarContent: Record<SidebarTab, FC> = {
   questionnaire: QuestionnaireContent,
   orders: OrdersContent,
+  "qtn-records": () => null,
   appointments: AppointmentsContent,
   "appointment-records": AppointmentRecordsContent,
   "add-advisor": AddAdvisorContent,
@@ -2261,7 +2226,15 @@ export const ChatSidebar: FC<ChatSidebarProps> = ({
 }) => {
   const showOrders = activeTab === "orders"
   const showQuestionnaire = activeTab === "questionnaire"
-  const showPanel = Boolean(activeTab) && !showOrders && !showQuestionnaire
+  const showQtnRecords = activeTab === "qtn-records"
+  const showPanel =
+    Boolean(activeTab) && !showOrders && !showQuestionnaire && !showQtnRecords
+
+  const { currentConversation } = useConversationContext()
+  const groupId =
+    currentConversation?.chatType === "groupChat"
+      ? currentConversation.conversationId
+      : undefined
 
   const ContentComponent = activeTab ? sidebarContent[activeTab] : null
 
@@ -2272,6 +2245,11 @@ export const ChatSidebar: FC<ChatSidebarProps> = ({
         visible={showQuestionnaire}
         onClose={onClose}
         initialSectionKey={consultationSection}
+      />
+      <QtnRecordsDrawer
+        visible={showQtnRecords}
+        groupId={groupId}
+        onClose={onClose}
       />
 
       {showPanel && ContentComponent ? (

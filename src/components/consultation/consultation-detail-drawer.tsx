@@ -1,5 +1,5 @@
 import dayjs from "dayjs"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { CloseIcon } from "tdesign-icons-react"
 import { Button, Drawer, Loading, Textarea } from "tdesign-react"
 
@@ -14,8 +14,11 @@ import {
   ImageViewerDialog,
   TableBlock,
   TruncatedText,
-  useScrollTabs,
 } from "~/components/qtn/qtn-detail"
+import {
+  ConsultationTabsBar,
+  useConsultationScrollTabs,
+} from "~/components/qtn/consultation-scroll-tabs"
 import { useRequest } from "~/hooks/useRequest"
 import {
   getConsultationDetailById,
@@ -184,42 +187,21 @@ export const ConsultationDetailDrawer = ({
     [setImageViewer]
   )
 
-  const tabs = useMemo(
-    () => [
-      { key: "info", label: "问诊信息" },
-      { key: "questionnaire", label: "患者问卷" },
-      { key: "diagnosis", label: "诊断报告" },
-    ],
-    []
-  )
-  const { containerRef, setSectionRef, activeKey, scrollTo } = useScrollTabs(
-    tabs,
-    { lockOnScrollToMs: 1200, hysteresis: 16 }
-  )
+  const resolvedInitialSectionKey = (initialSectionKey ?? "info") as
+    | "info"
+    | "questionnaire"
+    | "diagnosis"
+  const scrollMarker =
+    visible && detail && consultationId
+      ? `${consultationId}:${resolvedInitialSectionKey}`
+      : null
 
-  const initialScrollMarker = useMemo(() => {
-    if (!consultationId || !initialSectionKey) return null
-    return `${consultationId}:${initialSectionKey}`
-  }, [consultationId, initialSectionKey])
-  const initialScrolledMarkerRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (!visible) return
-    if (!initialSectionKey) return
-    if (!detail) return
-    if (!initialScrollMarker) return
-    if (initialScrolledMarkerRef.current === initialScrollMarker) return
-    initialScrolledMarkerRef.current = initialScrollMarker
-
-    let raf = 0
-    raf = requestAnimationFrame(() => {
-      scrollTo(initialSectionKey, "auto")
-      requestAnimationFrame(() => scrollTo(initialSectionKey, "auto"))
+  const { containerRef, setSectionRef, activeKey, scrollTo } =
+    useConsultationScrollTabs({
+      enabled: Boolean(visible && detail),
+      initialSectionKey: resolvedInitialSectionKey,
+      marker: scrollMarker,
     })
-    return () => {
-      if (raf) cancelAnimationFrame(raf)
-    }
-  }, [detail, initialScrollMarker, initialSectionKey, scrollTo, visible])
 
   const [orderDrawerVisible, setOrderDrawerVisible] = useState(false)
 
@@ -254,34 +236,11 @@ export const ConsultationDetailDrawer = ({
             </button>
           </div>
 
-          <div className="border-b border-[#e7e7e7] bg-white px-12">
-            <div className="flex h-12 items-center gap-6 text-[14px] leading-[22px]">
-              {tabs.map((tab) => {
-                const isActive = tab.key === activeKey
-                const isEnabled = Boolean(detail)
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    className={`relative flex h-full items-center ${
-                      isActive ? "text-brand" : "text-[rgba(0,0,0,0.6)]"
-                    }`}
-                    onClick={() => {
-                      if (!isEnabled) return
-                      scrollTo(tab.key)
-                    }}
-                  >
-                    {tab.label}
-                    <span
-                      className={`absolute bottom-0 left-0 h-[2px] w-full rounded-full ${
-                        isActive ? "bg-brand" : "bg-transparent"
-                      }`}
-                    />
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+          <ConsultationTabsBar
+            activeKey={activeKey}
+            enabled={Boolean(detail)}
+            onSelect={(key) => scrollTo(key)}
+          />
 
           <div className="min-h-0 flex-1">
             <Loading loading={loading} className="h-full">
