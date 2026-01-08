@@ -352,7 +352,6 @@ function OrderManagement() {
         orderId={activeOrder?.orderId}
         orderNum={activeOrder?.orderNum}
         onClose={() => setDrawerVisible(false)}
-        onSaved={() => runAsync()}
       />
     </div>
   )

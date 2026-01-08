@@ -171,9 +171,8 @@ export const OrderCustomMessage = ({
         visible={detailVisible}
         orderId={orderId}
         orderNum={orderNum}
+        refreshToken={detailNonce}
         onClose={() => setDetailVisible(false)}
-        onSaved={() => setDetailNonce((prev) => prev + 1)}
-        key={`order-detail-${orderId ?? orderNum ?? "unknown"}-${detailNonce}`}
       />
     </div>
   )

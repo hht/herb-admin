@@ -1,6 +1,6 @@
 import dayjs from "dayjs"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { rootStore, useAddressContext, useConversationContext } from "easemob-chat-uikit"
+import { useAddressContext, useConversationContext } from "easemob-chat-uikit"
 import { ChevronLeftIcon, CloseIcon, EditIcon } from "tdesign-icons-react"
 import {
   Button,
@@ -951,29 +951,7 @@ const OrdersContent: FC<OrdersContentProps> = ({ onClose }) => {
       },
     })
     MessagePlugin.success(`订单创建成功（${result.orderNum ?? "已生成"}）`)
-    const fromUser = getText(rootStore.client?.user)
-    const messageId =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `custom_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-    rootStore.messageStore.sendMessage({
-      id: messageId,
-      type: "custom",
-      chatType: "groupChat",
-      to: groupId,
-      from: fromUser,
-      time: Date.now(),
-      customEvent: "custom_event",
-      customExts: {
-        custom_key: "custom_value",
-      },
-      ext: {
-        orderId: result.orderId ?? undefined,
-        orderNum: result.orderNum ?? undefined,
-        title: "创建订单",
-        status: 1,
-      },
-    })
+    handleClose()
   }
 
   const canSendOrder = Boolean(groupId && hasPackage && !isEditing)
@@ -1985,8 +1963,6 @@ const AddAdvisorContent = () => {
 
   const [role, setRole] = useState<3 | 4>(4)
   const [keyword, setKeyword] = useState("")
-  const [pageNum, setPageNum] = useState(1)
-  const pageSize = 10
   const [joiningId, setJoiningId] = useState<number | null>(null)
   const [optimisticJoinedUsernames, setOptimisticJoinedUsernames] = useState<
     Set<string>
@@ -2024,28 +2000,37 @@ const AddAdvisorContent = () => {
     getGroupMembers?.(groupId, false)
   }, [getGroupMembers, groupId])
 
-  useEffect(() => {
-    setPageNum(1)
-  }, [role, keyword])
-
   const query = useMemo(
     () => ({
       role: String(role),
-      pageNum,
-      pageSize,
-      nickName: keyword.trim() ? keyword.trim() : undefined,
-      username: keyword.trim() ? keyword.trim() : undefined,
+      pageNum: 1,
+      pageSize: 5000,
     }),
-    [keyword, pageNum, role]
+    [role]
   )
 
   const { data, loading, refresh } = useRequest(() => listEmployees(query), {
     refreshDeps: [JSON.stringify(query)],
   })
 
-  const users = useMemo(() => data?.record ?? [], [data])
-  const total = data?.total ?? 0
-  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const users = useMemo(() => {
+    const list = data?.record ?? []
+    const trimmed = keyword.trim()
+    if (!trimmed) return list
+    const needle = trimmed.toLowerCase()
+    return list.filter((user) => {
+      const candidates = [
+        user.nickName,
+        user.username,
+        user.phonenumber,
+        user.num,
+      ]
+      return candidates.some((value) => {
+        if (typeof value !== "string") return false
+        return value.toLowerCase().includes(needle)
+      })
+    })
+  }, [data, keyword])
 
   const handleJoin = async (user: Employee) => {
     if (!groupId) {
@@ -2184,30 +2169,6 @@ const AddAdvisorContent = () => {
               暂无可添加用户
             </div>
           )}
-
-          <div className="flex items-center justify-between rounded border border-border bg-white px-4 py-3 text-sm text-neutral-950/60">
-            <span>
-              第 {pageNum} / {totalPages} 页（共 {total} 条）
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                disabled={pageNum <= 1}
-                onClick={() => setPageNum((prev) => Math.max(1, prev - 1))}
-              >
-                上一页
-              </Button>
-              <Button
-                variant="outline"
-                disabled={pageNum >= totalPages}
-                onClick={() =>
-                  setPageNum((prev) => Math.min(totalPages, prev + 1))
-                }
-              >
-                下一页
-              </Button>
-            </div>
-          </div>
         </div>
       </Loading>
     </div>
