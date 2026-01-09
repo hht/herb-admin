@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 import dayjs from "dayjs"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { SearchIcon } from "tdesign-icons-react"
 import {
   Button,
@@ -9,6 +9,7 @@ import {
   Form,
   Input,
   InputAdornment,
+  Loading,
   MessagePlugin,
   Pagination,
   Radio,
@@ -161,6 +162,8 @@ const UserManagement = () => {
     shallow
   )
   const [form] = Form.useForm()
+  const [drawerFetching, setDrawerFetching] = useState(false)
+  const [drawerError, setDrawerError] = useState<string | null>(null)
 
   const { data, loading, runAsync } = useRequest(() => listAppUsers(query), {
     refreshDeps: [JSON.stringify(query)],
@@ -195,17 +198,27 @@ const UserManagement = () => {
   const handleCloseDrawer = () => {
     setState({ drawerVisible: false, editing: null, blacklisted: false })
     form.reset()
+    setDrawerFetching(false)
+    setDrawerError(null)
   }
 
   const openDrawer = async (user: AppUser) => {
     setState({ drawerVisible: true, editing: user })
+    setDrawerError(null)
     form.setFieldsValue(buildFormValues(user))
     setState({ blacklisted: isBlacklisted(user) })
     if (!user.userId) return
-    const detail = await runDetail(user.userId)
-    setState({ editing: detail })
-    form.setFieldsValue(buildFormValues(detail))
-    setState({ blacklisted: isBlacklisted(detail) })
+    setDrawerFetching(true)
+    try {
+      const detail = await runDetail(user.userId)
+      setState({ editing: detail })
+      form.setFieldsValue(buildFormValues(detail))
+      setState({ blacklisted: isBlacklisted(detail) })
+    } catch (error) {
+      setDrawerError(error instanceof Error ? error.message : "加载失败，请稍后重试")
+    } finally {
+      setDrawerFetching(false)
+    }
   }
 
   const handleSubmit = async () => {
@@ -402,7 +415,7 @@ const UserManagement = () => {
               theme="primary"
               onClick={handleSubmit}
               loading={updateLoading}
-              disabled={detailLoading}
+              disabled={detailLoading || drawerFetching || Boolean(drawerError)}
             >
               保存
             </Button>
@@ -412,91 +425,99 @@ const UserManagement = () => {
           </div>
         }
       >
-        <Form
-          form={form}
-          layout="vertical"
-          colon={false}
-          labelAlign="top"
-          requiredMark={false}
-          className="space-y-6"
-        >
-          {renderSectionTitle("基础信息")}
-          <div className="grid grid-cols-2 gap-x-8 gap-y-6">
-            <Form.FormItem
-              name="nickName"
-              label={renderRequiredLabel("用户姓名")}
-              rules={[{ required: true, message: "请输入用户姓名" }]}
-              className="w-full"
-            >
-              <Input placeholder="请输入用户姓名" />
-            </Form.FormItem>
-            <Form.FormItem
-              name="userId"
-              label={renderRequiredLabel("用户编号")}
-              className="w-full"
-            >
-              <Input disabled />
-            </Form.FormItem>
-            <Form.FormItem
-              name="username"
-              label={renderRequiredLabel("手机号码")}
-              rules={[{ required: true, message: "请输入手机号" }]}
-              className="w-full"
-            >
-              <Input placeholder="请输入手机号码" />
-            </Form.FormItem>
-            <Form.FormItem
-              name="age"
-              label={renderRequiredLabel("年龄")}
-              className="w-full"
-            >
-              <InputAdornment append="岁" className="w-full">
-                <Input placeholder="请输入年龄" />
-              </InputAdornment>
-            </Form.FormItem>
-            <Form.FormItem
-              name="sex"
-              label={renderRequiredLabel("性别")}
-              className="col-span-2"
-            >
-              <Radio.Group
-                options={SEX_OPTIONS}
-                className="radio-group-start gap-6"
-              />
-            </Form.FormItem>
-            <Form.FormItem
-              name="height"
-              label={renderRequiredLabel("身高")}
-              className="w-full"
-            >
-              <InputAdornment append="厘米" className="w-full">
-                <Input placeholder="请输入身高" />
-              </InputAdornment>
-            </Form.FormItem>
-            <Form.FormItem
-              name="weight"
-              label={renderRequiredLabel("体重")}
-              className="w-full"
-            >
-              <InputAdornment append="千克" className="w-full">
-                <Input placeholder="请输入体重" />
-              </InputAdornment>
-            </Form.FormItem>
-            <Form.FormItem name="address" label="地址" className="col-span-2">
-              <Input placeholder="未填写" />
-            </Form.FormItem>
-            <div className="col-span-2 space-y-2">
-              <div className="text-sm text-neutral-900">
-                {renderRequiredLabel("是否拉黑")}
-              </div>
-              <Switch
-                size="large"
-                value={blacklisted}
-                onChange={(value) => setState({ blacklisted: value })}
-              />
-            </div>
+        {drawerError ? (
+          <div className="flex min-h-[240px] items-center justify-center px-6 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+            {drawerError}
           </div>
-        </Form>
+        ) : drawerFetching || detailLoading ? (
+          <Loading loading className="h-full" />
+        ) : (
+          <Form
+            form={form}
+            layout="vertical"
+            colon={false}
+            labelAlign="top"
+            requiredMark={false}
+            className="space-y-6"
+          >
+            {renderSectionTitle("基础信息")}
+            <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+              <Form.FormItem
+                name="nickName"
+                label={renderRequiredLabel("用户姓名")}
+                rules={[{ required: true, message: "请输入用户姓名" }]}
+                className="w-full"
+              >
+                <Input placeholder="请输入用户姓名" />
+              </Form.FormItem>
+              <Form.FormItem
+                name="userId"
+                label={renderRequiredLabel("用户编号")}
+                className="w-full"
+              >
+                <Input disabled />
+              </Form.FormItem>
+              <Form.FormItem
+                name="username"
+                label={renderRequiredLabel("手机号码")}
+                rules={[{ required: true, message: "请输入手机号" }]}
+                className="w-full"
+              >
+                <Input placeholder="请输入手机号码" />
+              </Form.FormItem>
+              <Form.FormItem
+                name="age"
+                label={renderRequiredLabel("年龄")}
+                className="w-full"
+              >
+                <InputAdornment append="岁" className="w-full">
+                  <Input placeholder="请输入年龄" />
+                </InputAdornment>
+              </Form.FormItem>
+              <Form.FormItem
+                name="sex"
+                label={renderRequiredLabel("性别")}
+                className="col-span-2"
+              >
+                <Radio.Group
+                  options={SEX_OPTIONS}
+                  className="radio-group-start gap-6"
+                />
+              </Form.FormItem>
+              <Form.FormItem
+                name="height"
+                label={renderRequiredLabel("身高")}
+                className="w-full"
+              >
+                <InputAdornment append="厘米" className="w-full">
+                  <Input placeholder="请输入身高" />
+                </InputAdornment>
+              </Form.FormItem>
+              <Form.FormItem
+                name="weight"
+                label={renderRequiredLabel("体重")}
+                className="w-full"
+              >
+                <InputAdornment append="千克" className="w-full">
+                  <Input placeholder="请输入体重" />
+                </InputAdornment>
+              </Form.FormItem>
+              <Form.FormItem name="address" label="地址" className="col-span-2">
+                <Input placeholder="未填写" />
+              </Form.FormItem>
+              <div className="col-span-2 space-y-2">
+                <div className="text-sm text-neutral-900">
+                  {renderRequiredLabel("是否拉黑")}
+                </div>
+                <Switch
+                  size="large"
+                  value={blacklisted}
+                  onChange={(value) => setState({ blacklisted: value })}
+                />
+              </div>
+            </div>
+          </Form>
+        )}
       </Drawer>
 
       <QtnRecordsDrawer

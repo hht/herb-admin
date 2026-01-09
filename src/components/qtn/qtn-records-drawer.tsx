@@ -1119,6 +1119,8 @@ export const QtnRecordsDrawer = ({
   onClose,
 }: QtnRecordsDrawerProps) => {
   const [compareLoading, setCompareLoading] = useState(false)
+  const [detailLoadError, setDetailLoadError] = useState<string | null>(null)
+  const [compareLoadError, setCompareLoadError] = useState<string | null>(null)
   const [refreshNonce, setRefreshNonce] = useState(0)
   const {
     page,
@@ -1154,7 +1156,7 @@ export const QtnRecordsDrawer = ({
     pageSize: page.pageSize ?? DEFAULT_QTN_PAGE.pageSize,
   }
 
-  const { data, loading } = useRequest(
+  const { data, loading, error: listError } = useRequest(
     () =>
       visible && groupId
         ? listConsultationQtnByGroupId({
@@ -1183,7 +1185,10 @@ export const QtnRecordsDrawer = ({
     { manual: true }
   )
 
-  const records = useMemo(() => data?.record ?? [], [data])
+  const records = useMemo(
+    () => (listError ? [] : data?.record ?? []),
+    [data, listError]
+  )
   const patientOptions = useMemo(() => {
     const unique = Array.from(
       new Set(records.map((item) => item.name).filter(Boolean))
@@ -1228,9 +1233,14 @@ export const QtnRecordsDrawer = ({
       MessagePlugin.error("缺少问诊记录ID")
       return
     }
-    setState({ activeRecord: record, view: "detail" })
-    const detail = await runConsultationDetail(record.consultationId)
-    setState({ detailData: detail })
+    setDetailLoadError(null)
+    setState({ activeRecord: record, view: "detail", detailData: null })
+    try {
+      const detail = await runConsultationDetail(record.consultationId)
+      setState({ detailData: detail })
+    } catch (error) {
+      setDetailLoadError(error instanceof Error ? error.message : "加载失败，请稍后重试")
+    }
   }
 
   const openCompare = async (items?: QtnRecord[]) => {
@@ -1241,29 +1251,18 @@ export const QtnRecordsDrawer = ({
       MessagePlugin.warning("请选择至少两条记录进行对比")
       return
     }
+    setCompareLoadError(null)
     setCompareLoading(true)
     setState({ view: "compare", compareData: [], selected: target })
     try {
-      const results = await Promise.allSettled(
+      const details = await Promise.all(
         target.map((record) =>
           getConsultationDetailById(record.consultationId as number)
         )
       )
-      const details = results.map((result) =>
-        result.status === "fulfilled"
-          ? result.value
-          : ({ consultation: null, qtnMainVO: null } as ConsultationDetail)
-      )
-      const hasFailure = results.some((result) => result.status === "rejected")
-      if (hasFailure) {
-        MessagePlugin.warning("部分问诊记录加载失败，已用“-”占位")
-        results.forEach((result) => {
-          if (result.status === "rejected") {
-            console.log("对比记录加载失败：", result.reason)
-          }
-        })
-      }
       setState({ compareData: details })
+    } catch (error) {
+      setCompareLoadError(error instanceof Error ? error.message : "加载失败，请稍后重试")
     } finally {
       setCompareLoading(false)
     }
@@ -1431,6 +1430,64 @@ export const QtnRecordsDrawer = ({
     return resolvedName ? `${resolvedName}的问诊记录` : "问诊记录"
   }, [records, userName, view])
 
+  const listErrorMessage = listError
+    ? listError instanceof Error
+      ? listError.message
+      : "加载失败，请稍后重试"
+    : null
+
+  const detailErrorView = detailLoadError ? (
+    <div className="flex h-full flex-col bg-white">
+      <div className="flex items-center justify-between border-b border-[#e7e7e7] px-4 py-4">
+        <button
+          type="button"
+          className="flex items-center gap-2 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)] hover:text-[rgba(0,0,0,0.9)]"
+          onClick={() => setState({ view: "list" })}
+        >
+          <ChevronLeftIcon size={16} />
+          返回
+        </button>
+        <button
+          type="button"
+          className="flex size-8 items-center justify-center rounded hover:bg-[#f3f3f3]"
+          onClick={handleClose}
+          aria-label="关闭"
+        >
+          <CloseIcon size={16} />
+        </button>
+      </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center px-12 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+        {detailLoadError}
+      </div>
+    </div>
+  ) : null
+
+  const compareErrorView = compareLoadError ? (
+    <div className="flex h-full flex-col bg-white">
+      <div className="flex items-center justify-between border-b border-[#e7e7e7] px-4 py-4">
+        <button
+          type="button"
+          className="flex items-center gap-2 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)] hover:text-[rgba(0,0,0,0.9)]"
+          onClick={() => setState({ view: "list" })}
+        >
+          <ChevronLeftIcon size={16} />
+          返回
+        </button>
+        <button
+          type="button"
+          className="flex size-8 items-center justify-center rounded hover:bg-[#f3f3f3]"
+          onClick={handleClose}
+          aria-label="关闭"
+        >
+          <CloseIcon size={16} />
+        </button>
+      </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center px-12 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+        {compareLoadError}
+      </div>
+    </div>
+  ) : null
+
   return (
     <Drawer
       className="qtn-drawer"
@@ -1441,7 +1498,7 @@ export const QtnRecordsDrawer = ({
       onClose={handleClose}
       closeBtn={view === "list" ? true : false}
       footer={
-        view === "list" && mode === "compare" ? (
+        view === "list" && mode === "compare" && !loading && !listError ? (
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Button theme="primary" onClick={() => openCompare()}>
@@ -1465,9 +1522,24 @@ export const QtnRecordsDrawer = ({
         ) : null
       }
     >
-      <Loading loading={detailLoading} className="h-full">
-        {view === "list" ? listView : null}
-        {view === "detail" && activeRecord ? (
+      {view === "list" ? (
+        listErrorMessage ? (
+          <div className="flex h-full items-center justify-center px-12 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+            {listErrorMessage}
+          </div>
+        ) : loading && (userId || groupId) ? (
+          <Loading loading className="h-full" />
+        ) : (
+          listView
+        )
+      ) : null}
+
+      {view === "detail" ? (
+        detailLoadError ? (
+          detailErrorView
+        ) : detailLoading ? (
+          <Loading loading className="h-full" />
+        ) : activeRecord ? (
           <DetailView
             record={activeRecord}
             detail={detailData}
@@ -1476,8 +1548,15 @@ export const QtnRecordsDrawer = ({
             onBack={() => setState({ view: "list" })}
             onClose={handleClose}
           />
-        ) : null}
-        {view === "compare" ? (
+        ) : null
+      ) : null}
+
+      {view === "compare" ? (
+        compareLoadError ? (
+          compareErrorView
+        ) : compareLoading ? (
+          <Loading loading className="h-full" />
+        ) : (
           <CompareView
             records={selected}
             details={compareData}
@@ -1485,8 +1564,8 @@ export const QtnRecordsDrawer = ({
             onBack={() => setState({ view: "list" })}
             onClose={handleClose}
           />
-        ) : null}
-      </Loading>
+        )
+      ) : null}
     </Drawer>
   )
 }

@@ -32,7 +32,7 @@ export const OrderDetailDrawer = ({
   const queryKey = query ? JSON.stringify(query) : ""
   const refreshKey = String(refreshToken ?? "")
 
-  const { data: order, loading } = useRequest(
+  const { data: order, loading, error } = useRequest(
     async () => {
       if (!query) return null
       if (query.orderId) return await getBackendOrderDetail(query.orderId)
@@ -54,7 +54,8 @@ export const OrderDetailDrawer = ({
     >
       <OrderDetailContent
         loading={loading}
-        order={order ?? null}
+        error={error}
+        order={error ? null : (order ?? null)}
         onClose={onClose}
       />
     </Drawer>

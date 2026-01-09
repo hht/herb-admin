@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 import dayjs from "dayjs"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { MoreIcon, SearchIcon } from "tdesign-icons-react"
 import {
   Button,
@@ -204,6 +204,9 @@ const EmployeeManagement = () => {
     shallow
   )
   const [form] = Form.useForm()
+  const [formDrawerFetching, setFormDrawerFetching] = useState(false)
+  const [formDrawerError, setFormDrawerError] = useState<string | null>(null)
+  const [detailDrawerError, setDetailDrawerError] = useState<string | null>(null)
 
   const { data, loading, runAsync } = useRequest(() => listEmployees(query), {
     refreshDeps: [JSON.stringify(query)],
@@ -250,34 +253,51 @@ const EmployeeManagement = () => {
 
   const openFormDrawer = async (employee?: Employee) => {
     setState({ drawerVisible: true })
+    setFormDrawerError(null)
     if (!employee) {
       setState({ editing: null })
       form.reset()
       form.setFieldsValue({ role: undefined })
+      setFormDrawerFetching(false)
       return
     }
     setState({ editing: employee })
     form.setFieldsValue(buildFormValues(employee))
     if (!employee.userId) return
-    const detailData = await runDetail(employee.userId)
-    setState({ editing: detailData })
-    form.setFieldsValue(buildFormValues(detailData))
+    setFormDrawerFetching(true)
+    try {
+      const detailData = await runDetail(employee.userId)
+      setState({ editing: detailData })
+      form.setFieldsValue(buildFormValues(detailData))
+    } catch (error) {
+      setFormDrawerError(error instanceof Error ? error.message : "加载失败，请稍后重试")
+    } finally {
+      setFormDrawerFetching(false)
+    }
   }
 
   const closeFormDrawer = () => {
     setState({ drawerVisible: false, editing: null })
     form.reset()
+    setFormDrawerFetching(false)
+    setFormDrawerError(null)
   }
 
   const openDetailDrawer = async (employee: Employee) => {
     setState({ detailVisible: true, detail: employee })
+    setDetailDrawerError(null)
     if (!employee.userId) return
-    const detailData = await runDetail(employee.userId)
-    setState({ detail: detailData })
+    try {
+      const detailData = await runDetail(employee.userId)
+      setState({ detail: detailData })
+    } catch (error) {
+      setDetailDrawerError(error instanceof Error ? error.message : "加载失败，请稍后重试")
+    }
   }
 
   const closeDetailDrawer = () => {
     setState({ detailVisible: false, detail: null })
+    setDetailDrawerError(null)
   }
 
   const handleContact = (employee: Employee) => {
@@ -590,7 +610,13 @@ const EmployeeManagement = () => {
             <Button
               theme="primary"
               onClick={handleSubmit}
-              disabled={createLoading || updateLoading}
+              disabled={
+                createLoading ||
+                updateLoading ||
+                detailLoading ||
+                formDrawerFetching ||
+                Boolean(formDrawerError)
+              }
             >
               保存
             </Button>
@@ -600,89 +626,97 @@ const EmployeeManagement = () => {
           </div>
         }
       >
-        <Form
-          form={form}
-          layout="vertical"
-          colon={false}
-          requiredMark={false}
-          labelAlign="top"
-          className="space-y-8"
-        >
-          <div className="space-y-8">
-            <div className="space-y-6">
-              {renderSectionTitle(EmployeeBasicIcon, "员工基础信息")}
-              <div className="grid grid-cols-2 gap-8">
+        {formDrawerError ? (
+          <div className="flex min-h-[240px] items-center justify-center px-6 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+            {formDrawerError}
+          </div>
+        ) : formDrawerFetching || detailLoading ? (
+          <Loading loading className="h-full" />
+        ) : (
+          <Form
+            form={form}
+            layout="vertical"
+            colon={false}
+            requiredMark={false}
+            labelAlign="top"
+            className="space-y-8"
+          >
+            <div className="space-y-8">
+              <div className="space-y-6">
+                {renderSectionTitle(EmployeeBasicIcon, "员工基础信息")}
+                <div className="grid grid-cols-2 gap-8">
+                  <Form.FormItem
+                    name="nickName"
+                    label={renderRequiredLabel("员工姓名")}
+                    rules={[{ required: true, message: "请输入员工姓名" }]}
+                  >
+                    <Input placeholder="请输入员工姓名" />
+                  </Form.FormItem>
+                  <Form.FormItem
+                    name="userId"
+                    label={renderRequiredLabel("员工编号")}
+                  >
+                    <Input disabled />
+                  </Form.FormItem>
+                  <Form.FormItem
+                    name="sex"
+                    label={renderRequiredLabel("性别")}
+                    className="col-span-2"
+                  >
+                    <Radio.Group
+                      options={SEX_OPTIONS}
+                      className="radio-group-start gap-6"
+                    />
+                  </Form.FormItem>
+                  <Form.FormItem name="post" label="职位">
+                    <Input placeholder="请输入职位" />
+                  </Form.FormItem>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {renderSectionTitle(EmployeeAccountIcon, "账户信息")}
+                <div className="grid grid-cols-2 gap-8">
+                  <Form.FormItem
+                    name="phonenumber"
+                    label={renderRequiredLabel("手机号码")}
+                    rules={[{ required: true, message: "请输入手机号" }]}
+                  >
+                    <Input placeholder="请输入手机号码" />
+                  </Form.FormItem>
+                  <Form.FormItem name="email" label={renderRequiredLabel("邮箱")}>
+                    <Input placeholder="请输入邮箱地址" />
+                  </Form.FormItem>
+                  <Form.FormItem
+                    name="password"
+                    label={editing ? "初始密码" : renderRequiredLabel("初始密码")}
+                    rules={
+                      editing
+                        ? []
+                        : [{ required: true, message: "请输入初始密码" }]
+                    }
+                  >
+                    <Input type="password" placeholder="请输入初始密码" />
+                  </Form.FormItem>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {renderSectionTitle(EmployeePermissionIcon, "员工权限")}
                 <Form.FormItem
-                  name="nickName"
-                  label={renderRequiredLabel("员工姓名")}
-                  rules={[{ required: true, message: "请输入员工姓名" }]}
-                >
-                  <Input placeholder="请输入员工姓名" />
-                </Form.FormItem>
-                <Form.FormItem
-                  name="userId"
-                  label={renderRequiredLabel("员工编号")}
-                >
-                  <Input disabled />
-                </Form.FormItem>
-                <Form.FormItem
-                  name="sex"
-                  label={renderRequiredLabel("性别")}
-                  className="col-span-2"
+                  name="role"
+                  label={renderRequiredLabel("设置员工权限")}
+                  rules={[{ required: true, message: "请选择员工权限" }]}
                 >
                   <Radio.Group
-                    options={SEX_OPTIONS}
-                    className="radio-group-start gap-6"
+                    options={PERMISSION_OPTIONS}
+                    className="radio-group-start radio-group-stack gap-2"
                   />
                 </Form.FormItem>
-                <Form.FormItem name="post" label="职位">
-                  <Input placeholder="请输入职位" />
-                </Form.FormItem>
               </div>
             </div>
-
-            <div className="space-y-6">
-              {renderSectionTitle(EmployeeAccountIcon, "账户信息")}
-              <div className="grid grid-cols-2 gap-8">
-                <Form.FormItem
-                  name="phonenumber"
-                  label={renderRequiredLabel("手机号码")}
-                  rules={[{ required: true, message: "请输入手机号" }]}
-                >
-                  <Input placeholder="请输入手机号码" />
-                </Form.FormItem>
-                <Form.FormItem name="email" label={renderRequiredLabel("邮箱")}>
-                  <Input placeholder="请输入邮箱地址" />
-                </Form.FormItem>
-                <Form.FormItem
-                  name="password"
-                  label={editing ? "初始密码" : renderRequiredLabel("初始密码")}
-                  rules={
-                    editing
-                      ? []
-                      : [{ required: true, message: "请输入初始密码" }]
-                  }
-                >
-                  <Input type="password" placeholder="请输入初始密码" />
-                </Form.FormItem>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              {renderSectionTitle(EmployeePermissionIcon, "员工权限")}
-              <Form.FormItem
-                name="role"
-                label={renderRequiredLabel("设置员工权限")}
-                rules={[{ required: true, message: "请选择员工权限" }]}
-              >
-                <Radio.Group
-                  options={PERMISSION_OPTIONS}
-                  className="radio-group-start radio-group-stack gap-2"
-                />
-              </Form.FormItem>
-            </div>
-          </div>
-        </Form>
+          </Form>
+        )}
       </Drawer>
 
       <Drawer
@@ -700,7 +734,13 @@ const EmployeeManagement = () => {
           </div>
         }
       >
-        <Loading loading={detailLoading}>
+        {detailDrawerError ? (
+          <div className="flex min-h-[240px] items-center justify-center px-6 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+            {detailDrawerError}
+          </div>
+        ) : detailLoading ? (
+          <Loading loading className="min-h-[240px]" />
+        ) : (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -727,7 +767,7 @@ const EmployeeManagement = () => {
               ))}
             </div>
           </div>
-        </Loading>
+        )}
       </Drawer>
 
       <Dialog

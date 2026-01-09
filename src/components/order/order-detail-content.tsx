@@ -161,10 +161,12 @@ const resolveShippingInfo = (order: Order | null) => {
 
 export const OrderDetailContent = ({
   loading,
+  error,
   order,
   onClose,
 }: {
   loading: boolean
+  error?: unknown
   order: Order | null
   onClose: () => void
 }) => {
@@ -200,9 +202,14 @@ export const OrderDetailContent = ({
 
       {/* Body */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        <Loading loading={loading} className="h-full">
-          <div className="h-full overflow-y-auto px-12 pb-12 pt-24">
-            <div className="space-y-8">
+        {error ? (
+          <div className="flex h-full items-center justify-center px-12 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+            {error instanceof Error ? error.message : "加载失败，请稍后重试"}
+          </div>
+        ) : (
+          <Loading loading={loading} className="h-full">
+            <div className="h-full overflow-y-auto px-12 pb-12 pt-24">
+              <div className="space-y-8">
               {/* 订单信息 */}
               <section>
                 <SectionTitle iconSvg={orderFileSvg} title="订单信息" />
@@ -314,8 +321,9 @@ export const OrderDetailContent = ({
                 </div>
               </section>
             </div>
-          </div>
-        </Loading>
+            </div>
+          </Loading>
+        )}
       </div>
     </div>
   )

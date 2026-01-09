@@ -197,7 +197,7 @@ const OrdersContent: FC<OrdersContentProps> = ({ onClose }) => {
   const selectedTemplateId = toNumber(Form.useWatch("templateId", form))
   const hasPackage = Boolean(selectedTemplateId)
 
-  const { data, loading } = useRequest(
+  const { data, loading, error: templatesError } = useRequest(
     () => listHealthTemplates({ pageNum: 1, pageSize: 10 }),
     {
       refreshDeps: [],
@@ -212,6 +212,7 @@ const OrdersContent: FC<OrdersContentProps> = ({ onClose }) => {
   const {
     data: consultationDetail,
     loading: consultationLoading,
+    error: consultationError,
     runAsync: reloadConsultation,
   } = useRequest(
     () =>
@@ -986,11 +987,17 @@ const OrdersContent: FC<OrdersContentProps> = ({ onClose }) => {
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        <Loading
-          loading={loading || consultationLoading}
-          size="small"
-          className="h-full"
-        >
+        {templatesError || consultationError ? (
+          <div className="flex h-full items-center justify-center px-12 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+            {templatesError instanceof Error
+              ? templatesError.message
+              : consultationError instanceof Error
+                ? consultationError.message
+                : "加载失败，请稍后重试"}
+          </div>
+        ) : loading || consultationLoading ? (
+          <Loading loading size="small" className="h-full" />
+        ) : (
           <Form
             form={form}
             labelAlign="top"
@@ -1340,7 +1347,7 @@ const OrdersContent: FC<OrdersContentProps> = ({ onClose }) => {
               </div>
             </div>
           </Form>
-        </Loading>
+        )}
       </div>
 
       <div className="border-t border-[#e7e7e7] bg-white px-6 py-4">
@@ -1421,6 +1428,7 @@ const ChatConsultationDetailContent = ({
   const {
     data: detail,
     loading,
+    error: detailError,
     runAsync: reload,
   } = useRequest(
     () =>
@@ -1638,30 +1646,37 @@ const ChatConsultationDetailContent = ({
 
       <ConsultationTabsBar
         activeKey={activeKey}
-        enabled={Boolean(groupId && detail)}
+        enabled={Boolean(groupId && detail && !detailError)}
         onSelect={(key) => scrollTo(key)}
       />
 
       <div className="min-h-0 flex-1">
-        <Loading loading={loading} className="h-full">
+        {!groupId ? (
+          <div className="h-full px-12 pb-8 pt-6 text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+            请选择群聊后查看问诊详情
+          </div>
+        ) : detailError ? (
+          <div className="flex h-full items-center justify-center px-12 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+            {detailError instanceof Error
+              ? detailError.message
+              : "加载失败，请稍后重试"}
+          </div>
+        ) : loading ? (
+          <Loading loading className="h-full" />
+        ) : !detail ? (
+          <div className="h-full px-12 pb-8 pt-6 text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+            暂无问诊详情
+          </div>
+        ) : (
           <div
             ref={containerRef}
             className="h-full overflow-y-auto px-12 pb-8 pt-6"
           >
-            {!groupId ? (
-              <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
-                请选择群聊后查看问诊详情
-              </div>
-            ) : !detail ? (
-              <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
-                暂无问诊详情
-              </div>
-            ) : (
-              <div>
-                <div ref={setSectionRef("info")} className="space-y-6">
-                  <div className="flex items-center gap-4">
-                    <span className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecf9f1]">
-                      <SvgIcon svg={qtnInfoSvg} className="inline-flex size-4" />
+            <div>
+              <div ref={setSectionRef("info")} className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <span className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecf9f1]">
+                    <SvgIcon svg={qtnInfoSvg} className="inline-flex size-4" />
                     </span>
                     <span className="text-[20px] font-semibold leading-[28px] text-[rgba(0,0,0,0.9)]">
                       问诊信息
@@ -1858,10 +1873,9 @@ const ChatConsultationDetailContent = ({
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+            </div>
           </div>
-        </Loading>
+        )}
       </div>
 
       <div className="border-t border-[#e7e7e7] bg-white px-12 py-4">

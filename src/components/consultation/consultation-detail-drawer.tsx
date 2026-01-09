@@ -78,7 +78,11 @@ export const ConsultationDetailDrawer = ({
   initialSectionKey?: ConsultationDetailDrawerSection
   onClose: () => void
 }) => {
-  const { data: detail, loading } = useRequest<ConsultationDetail | null, []>(
+  const {
+    data: detail,
+    loading,
+    error: detailError,
+  } = useRequest<ConsultationDetail | null, []>(
     () =>
       visible && consultationId
         ? getConsultationDetailById(consultationId)
@@ -86,8 +90,9 @@ export const ConsultationDetailDrawer = ({
     { refreshDeps: [visible ? consultationId ?? 0 : 0] }
   )
 
-  const consultation = detail?.consultation ?? null
-  const qtnMain = detail?.qtnMainVO ?? null
+  const safeDetail = detailError ? null : detail
+  const consultation = safeDetail?.consultation ?? null
+  const qtnMain = safeDetail?.qtnMainVO ?? null
 
   const statusKey = getText(consultation?.status)
   const statusMeta =
@@ -142,8 +147,12 @@ export const ConsultationDetailDrawer = ({
     (consultation as unknown as { orderNumber?: unknown })?.orderNumber
   )
 
-  const { data: orderDetail } = useRequest(
-    () => (visible && orderId ? getBackendOrderDetail(orderId) : Promise.resolve(null)),
+  const {
+    data: orderDetail,
+    error: orderError,
+  } = useRequest(
+    () =>
+      visible && orderId ? getBackendOrderDetail(orderId) : Promise.resolve(null),
     { refreshDeps: [visible ? orderId ?? 0 : 0] }
   )
 
@@ -192,13 +201,13 @@ export const ConsultationDetailDrawer = ({
     | "questionnaire"
     | "diagnosis"
   const scrollMarker =
-    visible && detail && consultationId
+    visible && safeDetail && consultationId
       ? `${consultationId}:${resolvedInitialSectionKey}`
       : null
 
   const { containerRef, setSectionRef, activeKey, scrollTo } =
     useConsultationScrollTabs({
-      enabled: Boolean(visible && detail),
+      enabled: Boolean(visible && safeDetail),
       initialSectionKey: resolvedInitialSectionKey,
       marker: scrollMarker,
     })
@@ -238,26 +247,34 @@ export const ConsultationDetailDrawer = ({
 
           <ConsultationTabsBar
             activeKey={activeKey}
-            enabled={Boolean(detail)}
+            enabled={Boolean(safeDetail)}
             onSelect={(key) => scrollTo(key)}
           />
 
           <div className="min-h-0 flex-1">
-            <Loading loading={loading} className="h-full">
-              <div
-                ref={containerRef}
-                className="h-full overflow-y-auto px-12 pb-8 pt-6"
-              >
-                {!consultationId ? (
-                  <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
-                    缺少问诊ID
-                  </div>
-                ) : !detail ? (
-                  <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
-                    暂无问诊详情
-                  </div>
-                ) : (
-                  <div>
+            {detailError ? (
+              <div className="flex h-full items-center justify-center px-12 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+                {detailError instanceof Error
+                  ? detailError.message
+                  : "加载失败，请稍后重试"}
+              </div>
+            ) : (
+              <Loading loading={loading} className="h-full">
+                {loading ? null : (
+                  <div
+                    ref={containerRef}
+                    className="h-full overflow-y-auto px-12 pb-8 pt-6"
+                  >
+                    {!consultationId ? (
+                      <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                        缺少问诊ID
+                      </div>
+                    ) : !safeDetail ? (
+                      <div className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                        暂无问诊详情
+                      </div>
+                    ) : (
+                      <div>
                     <div ref={setSectionRef("info")} className="space-y-6">
                       <div className="flex items-center gap-4">
                         <span className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecf9f1]">
@@ -366,46 +383,52 @@ export const ConsultationDetailDrawer = ({
                             </Button>
                           </div>
 
-                          <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4">
-                            <div className="flex items-center gap-6">
-                              <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
-                                订单编号
-                              </span>
-                              <TruncatedText
-                                value={getText(orderDetail?.orderNum, orderNum)}
-                                className="block max-w-[240px] truncate text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]"
-                              />
+                          {orderError ? (
+                            <div className="mt-4 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+                              订单信息加载失败
                             </div>
-                            <div className="flex items-center gap-6">
-                              <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
-                                订单状态
-                              </span>
-                              <span className="flex items-center gap-2 text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
-                                <span
-                                  className="inline-flex size-[6px] rounded-full"
-                                  style={{ backgroundColor: orderStatusMeta.dot }}
+                          ) : (
+                            <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4">
+                              <div className="flex items-center gap-6">
+                                <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                                  订单编号
+                                </span>
+                                <TruncatedText
+                                  value={getText(orderDetail?.orderNum, orderNum)}
+                                  className="block max-w-[240px] truncate text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]"
                                 />
-                                {orderStatusMeta.label}
-                              </span>
+                              </div>
+                              <div className="flex items-center gap-6">
+                                <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                                  订单状态
+                                </span>
+                                <span className="flex items-center gap-2 text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                                  <span
+                                    className="inline-flex size-[6px] rounded-full"
+                                    style={{ backgroundColor: orderStatusMeta.dot }}
+                                  />
+                                  {orderStatusMeta.label}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-6">
+                                <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                                  支付金额
+                                </span>
+                                <span className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
+                                  {formatMoney(orderDetail?.price ?? null)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-6">
+                                <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
+                                  套餐名称
+                                </span>
+                                <TruncatedText
+                                  value={getText(orderDetail?.packageName, orderDetail?.pkgName)}
+                                  className="block max-w-[240px] truncate text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]"
+                                />
+                              </div>
                             </div>
-                            <div className="flex items-center gap-6">
-                              <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
-                                支付金额
-                              </span>
-                              <span className="text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]">
-                                {formatMoney(orderDetail?.price ?? null)}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-6">
-                              <span className="w-[90px] text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
-                                套餐名称
-                              </span>
-                              <TruncatedText
-                                value={getText(orderDetail?.packageName, orderDetail?.pkgName)}
-                                className="block max-w-[240px] truncate text-[14px] leading-[22px] text-[rgba(0,0,0,0.9)]"
-                              />
-                            </div>
-                          </div>
+                          )}
                         </div>
                       ) : null}
                     </div>
@@ -496,7 +519,9 @@ export const ConsultationDetailDrawer = ({
                   </div>
                 )}
               </div>
-            </Loading>
+                )}
+              </Loading>
+            )}
           </div>
         </div>
       </Drawer>

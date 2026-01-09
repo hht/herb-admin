@@ -5,6 +5,7 @@ import {
   Card,
   Drawer,
   Form,
+  Loading,
   MessagePlugin,
   Popconfirm,
   Space,
@@ -90,6 +91,7 @@ export const SchemaCrud = <
   const [drawerVisible, setDrawerVisible] = useState(false)
   const [editing, setEditing] = useState<T | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
   const [form] = Form.useForm()
   const [searchForm] = Form.useForm()
 
@@ -125,6 +127,7 @@ export const SchemaCrud = <
   const openDrawer = useCallback(
     async (record?: T) => {
       setDrawerVisible(true)
+      setDetailError(null)
       if (record) {
         setEditing(record)
         fillForm(record)
@@ -134,12 +137,17 @@ export const SchemaCrud = <
             const detailData = await detail(record)
             setEditing(detailData)
             fillForm(detailData)
+          } catch (error) {
+            setDetailError(
+              error instanceof Error ? error.message : "加载失败，请稍后重试"
+            )
           } finally {
             setDetailLoading(false)
           }
         }
       } else {
         setEditing(null)
+        setDetailError(null)
         form.reset()
         form.setFieldsValue(
           getCreateInitialValues ? getCreateInitialValues() : {}
@@ -299,25 +307,45 @@ export const SchemaCrud = <
         visible={drawerVisible}
         placement="right"
         size="40%"
-        onClose={() => setDrawerVisible(false)}
+        onClose={() => {
+          setDrawerVisible(false)
+          setDetailError(null)
+          setDetailLoading(false)
+        }}
         footer={
           <Space>
-            <Button onClick={() => setDrawerVisible(false)}>取消</Button>
+            <Button
+              onClick={() => {
+                setDrawerVisible(false)
+                setDetailError(null)
+                setDetailLoading(false)
+              }}
+            >
+              取消
+            </Button>
             <Button
               theme="primary"
               onClick={handleSubmit}
-              disabled={detailLoading}
+              disabled={detailLoading || Boolean(detailError)}
             >
               保存
             </Button>
           </Space>
         }
       >
-        <SchemaForm
-          form={form as FormProps["form"]}
-          schema={drawerSchema}
-          layout="vertical"
-        />
+        {detailError ? (
+          <div className="flex min-h-[240px] items-center justify-center px-6 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+            {detailError}
+          </div>
+        ) : detailLoading ? (
+          <Loading loading className="min-h-[240px]" />
+        ) : (
+          <SchemaForm
+            form={form as FormProps["form"]}
+            schema={drawerSchema}
+            layout="vertical"
+          />
+        )}
       </Drawer>
     </div>
   )

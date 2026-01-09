@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 import dayjs from "dayjs"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { AddIcon, CloseIcon, SearchIcon } from "tdesign-icons-react"
 import {
   Button,
@@ -89,6 +89,8 @@ const PackageSettings = () => {
     shallow
   )
   const [form] = Form.useForm()
+  const [drawerFetching, setDrawerFetching] = useState(false)
+  const [drawerError, setDrawerError] = useState<string | null>(null)
 
   const { data, loading, runAsync } = useRequest(
     () => listHealthTemplates(query),
@@ -144,19 +146,28 @@ const PackageSettings = () => {
 
   const openDrawer = async (template?: HealthTemplate) => {
     setState({ drawerVisible: true })
+    setDrawerError(null)
     if (!template) {
       setState({ editing: null })
       form.reset()
       setState({ contents: [createEmptyContent(0)] })
+      setDrawerFetching(false)
       return
     }
     setState({ editing: template })
     fillForm(template)
     setState({ contents: buildContentState(template) })
     if (!template.packageId) return
-    const detail = await runDetail(template.packageId)
-    setState({ editing: detail, contents: buildContentState(detail) })
-    fillForm(detail)
+    setDrawerFetching(true)
+    try {
+      const detail = await runDetail(template.packageId)
+      setState({ editing: detail, contents: buildContentState(detail) })
+      fillForm(detail)
+    } catch (error) {
+      setDrawerError(error instanceof Error ? error.message : "加载失败，请稍后重试")
+    } finally {
+      setDrawerFetching(false)
+    }
   }
 
   const handleDelete = async (template: HealthTemplate) => {
@@ -336,117 +347,132 @@ const PackageSettings = () => {
         visible={drawerVisible}
         placement="right"
         size="760px"
-        onClose={() => setState({ drawerVisible: false })}
+        onClose={() => {
+          setState({ drawerVisible: false })
+          setDrawerFetching(false)
+          setDrawerError(null)
+        }}
         footer={
           <div className="flex items-center gap-2">
             <Button
               theme="primary"
               onClick={handleSubmit}
               loading={createLoading || updateLoading}
-              disabled={detailLoading}
+              disabled={detailLoading || drawerFetching || Boolean(drawerError)}
             >
               {editing ? "保存" : "创建"}
             </Button>
             <Button
               variant="outline"
-              onClick={() => setState({ drawerVisible: false })}
+              onClick={() => {
+                setState({ drawerVisible: false })
+                setDrawerFetching(false)
+                setDrawerError(null)
+              }}
             >
               取消
             </Button>
           </div>
         }
       >
-        <Form form={form} layout="vertical" colon={false} labelAlign="top">
-          <div className="grid grid-cols-2 gap-8">
-            <Form.FormItem
-              name="disease"
-              label="病种"
-              rules={[{ required: true, message: "请输入病种" }]}
-            >
-              <Input placeholder="请输入病种" />
-            </Form.FormItem>
-            <Form.FormItem
-              name="name"
-              label="套餐名"
-              rules={[{ required: true, message: "请输入套餐名" }]}
-            >
-              <Input placeholder="请输入套餐名" />
-            </Form.FormItem>
+        {drawerError ? (
+          <div className="flex min-h-[240px] items-center justify-center px-6 text-[14px] leading-[22px] text-[rgba(0,0,0,0.6)]">
+            {drawerError}
           </div>
+        ) : drawerFetching || detailLoading ? (
+          <Loading loading className="h-full" />
+        ) : (
+          <Form form={form} layout="vertical" colon={false} labelAlign="top">
+            <div className="grid grid-cols-2 gap-8">
+              <Form.FormItem
+                name="disease"
+                label="病种"
+                rules={[{ required: true, message: "请输入病种" }]}
+              >
+                <Input placeholder="请输入病种" />
+              </Form.FormItem>
+              <Form.FormItem
+                name="name"
+                label="套餐名"
+                rules={[{ required: true, message: "请输入套餐名" }]}
+              >
+                <Input placeholder="请输入套餐名" />
+              </Form.FormItem>
+            </div>
 
-          <div className="my-6 border-t border-border" />
+            <div className="my-6 border-t border-border" />
 
-          <div className="space-y-6">
-            {contents.map((service, index) => {
-              const isRequired = index === 0
-              return (
-                <div key={service.title ?? index} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-[#1D2129]">
-                      服务{index + 1}
-                      {isRequired ? (
-                        <span className="ml-1 text-[#F53F3F]">*</span>
-                      ) : (
-                        <span className="ml-2 text-xs text-neutral-500">
-                          （选填）
-                        </span>
+            <div className="space-y-6">
+              {contents.map((service, index) => {
+                const isRequired = index === 0
+                return (
+                  <div key={service.title ?? index} className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-[#1D2129]">
+                        服务{index + 1}
+                        {isRequired ? (
+                          <span className="ml-1 text-[#F53F3F]">*</span>
+                        ) : (
+                          <span className="ml-2 text-xs text-neutral-500">
+                            （选填）
+                          </span>
+                        )}
+                      </div>
+                      {isRequired ? null : (
+                        <button
+                          type="button"
+                          className="flex size-6 items-center justify-center rounded hover:bg-neutral-100"
+                          onClick={() => handleRemoveService(index)}
+                        >
+                          <CloseIcon size={16} className="text-neutral-500" />
+                        </button>
                       )}
                     </div>
-                    {isRequired ? null : (
-                      <button
-                        type="button"
-                        className="flex size-6 items-center justify-center rounded hover:bg-neutral-100"
-                        onClick={() => handleRemoveService(index)}
-                      >
-                        <CloseIcon size={16} className="text-neutral-500" />
-                      </button>
-                    )}
+                    <Input
+                      value={service.name ?? ""}
+                      onChange={(value) => updateService(index, "name", value)}
+                      placeholder="请输入服务名"
+                    />
+                    <Textarea
+                      value={service.content ?? ""}
+                      onChange={(value) =>
+                        updateService(index, "content", value)
+                      }
+                      placeholder="请输入服务详细内容"
+                      autosize={{ minRows: 4, maxRows: 4 }}
+                    />
                   </div>
-                  <Input
-                    value={service.name ?? ""}
-                    onChange={(value) => updateService(index, "name", value)}
-                    placeholder="请输入服务名"
-                  />
-                  <Textarea
-                    value={service.content ?? ""}
-                    onChange={(value) => updateService(index, "content", value)}
-                    placeholder="请输入服务详细内容"
-                    autosize={{ minRows: 4, maxRows: 4 }}
-                  />
-                </div>
-              )
-            })}
-            <button
-              type="button"
-              className="text-sm text-brand underline"
-              onClick={handleAddService}
-            >
-              添加服务
-            </button>
-          </div>
+                )
+              })}
+              <button
+                type="button"
+                className="text-sm text-brand underline"
+                onClick={handleAddService}
+              >
+                添加服务
+              </button>
+            </div>
 
-          <div className="my-6 border-t border-border" />
+            <div className="my-6 border-t border-border" />
 
-          <div className="grid grid-cols-2 gap-8">
-            <Form.FormItem
-              name="price"
-              label="套餐现价"
-              rules={[{ required: true, message: "请输入价格" }]}
-            >
-              <InputAdornment className="w-full" append="人民币">
-                <Input placeholder="请输入价格" />
-              </InputAdornment>
-            </Form.FormItem>
-            <Form.FormItem
-              name="originalPrice"
-              label="套餐原价（选填）"
-            >
-              <InputAdornment className="w-full" append="人民币">
-                <Input placeholder="请输入价格" />
-              </InputAdornment>
-            </Form.FormItem>
-          </div>
-        </Form>
+            <div className="grid grid-cols-2 gap-8">
+              <Form.FormItem
+                name="price"
+                label="套餐现价"
+                rules={[{ required: true, message: "请输入价格" }]}
+              >
+                <InputAdornment className="w-full" append="人民币">
+                  <Input placeholder="请输入价格" />
+                </InputAdornment>
+              </Form.FormItem>
+              <Form.FormItem name="originalPrice" label="套餐原价（选填）">
+                <InputAdornment className="w-full" append="人民币">
+                  <Input placeholder="请输入价格" />
+                </InputAdornment>
+              </Form.FormItem>
+            </div>
+          </Form>
+        )}
       </Drawer>
     </div>
   )
