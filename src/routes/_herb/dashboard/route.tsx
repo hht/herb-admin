@@ -21,6 +21,8 @@ import {
   OrderCustomMessage,
 } from "~/components/chat/order-custom-message"
 import { isOrderCustomMessage } from "~/components/chat/order-custom-message-utils"
+import { StartConsultationCustomMessage } from "~/components/chat/start-consultation-custom-message"
+import { isStartConsultationCustomMessage } from "~/components/chat/start-consultation-custom-message-utils"
 import { cn } from "~/libs/utils"
 import { fetchChatUserProfilesByUserIds } from "~/services/chat-user-profiles"
 import { useOrderStore } from "~/stores/order-store"
@@ -62,6 +64,9 @@ const ChatWorkspace = () => {
   const [activeTab, setActiveTab] = useState<SidebarTab | null>(null)
   const [consultationSection, setConsultationSection] =
     useState<ConsultationDrawerSection>("info")
+  const [activeConsultationId, setActiveConsultationId] = useState<number | null>(
+    null
+  )
   const hasConversation = Boolean(currentConversation?.conversationId)
 
   useEffect(() => {
@@ -105,6 +110,7 @@ const ChatWorkspace = () => {
   }
 
   const handleOperateClick = (operation: ChatOperateItem) => {
+    setActiveConsultationId(null)
     if (operation.tab === "questionnaire") {
       const nextSection = operation.consultationSection ?? "info"
 
@@ -162,6 +168,20 @@ const ChatWorkspace = () => {
           />
         )
       }
+      if (isStartConsultationCustomMessage(baseMessage)) {
+        return (
+          <StartConsultationCustomMessage
+            style={style}
+            message={baseMessage}
+            messageProps={messageProps ?? undefined}
+            onViewQuestionnaire={(consultationId) => {
+              setActiveConsultationId(consultationId ?? null)
+              setConsultationSection("questionnaire")
+              setActiveTab("questionnaire")
+            }}
+          />
+        )
+      }
       const ext =
         typeof message.ext === "object" && message.ext ? message.ext : {}
       const title =
@@ -194,7 +214,7 @@ const ChatWorkspace = () => {
         custom: renderCustomMessage,
       },
     }
-  }, [])
+  }, [setActiveTab, setConsultationSection])
 
   return (
     <div className="flex h-full w-full">
@@ -263,7 +283,11 @@ const ChatWorkspace = () => {
           <ChatSidebar
             activeTab={activeTab}
             consultationSection={consultationSection}
-            onClose={() => setActiveTab(null)}
+            consultationId={activeConsultationId}
+            onClose={() => {
+              setActiveTab(null)
+              setActiveConsultationId(null)
+            }}
           />
         </div>
       </div>

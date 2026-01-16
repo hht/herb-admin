@@ -41,7 +41,11 @@ import {
   type HealthTemplate,
 } from "~/services/health-templates"
 import { createOrder } from "~/services/orders"
-import { getConsultationDetailByGroupId, type QtnQuestion } from "~/services/app-user-qtn"
+import {
+  getConsultationDetailByGroupId,
+  getConsultationDetailById,
+  type QtnQuestion,
+} from "~/services/app-user-qtn"
 import {
   createEmptyOrderContent,
   useOrderStore,
@@ -66,6 +70,7 @@ export type ConsultationDrawerSection = "info" | "questionnaire" | "diagnosis"
 interface ChatSidebarProps {
   activeTab: SidebarTab | null
   consultationSection?: ConsultationDrawerSection
+  consultationId?: number | null
   onClose: () => void
 }
 
@@ -1414,9 +1419,11 @@ const AppointmentRecordsContent = () => {
 const ChatConsultationDetailContent = ({
   onClose,
   initialSectionKey,
+  consultationId: targetConsultationId,
 }: {
   onClose: () => void
   initialSectionKey?: ConsultationDrawerSection
+  consultationId?: number | null
 }) => {
   const sessionRole = useHerbStore((state) => state.role)
   const { currentConversation } = useConversationContext()
@@ -1425,6 +1432,9 @@ const ChatConsultationDetailContent = ({
       ? currentConversation.conversationId
       : undefined
 
+  const canQueryById =
+    typeof targetConsultationId === "number" && !Number.isNaN(targetConsultationId)
+
   const {
     data: detail,
     loading,
@@ -1432,10 +1442,12 @@ const ChatConsultationDetailContent = ({
     runAsync: reload,
   } = useRequest(
     () =>
-      groupId
-        ? getConsultationDetailByGroupId(groupId)
-        : Promise.resolve(null),
-    { refreshDeps: [groupId] }
+      canQueryById
+        ? getConsultationDetailById(targetConsultationId)
+        : groupId
+          ? getConsultationDetailByGroupId(groupId)
+          : Promise.resolve(null),
+    { refreshDeps: [canQueryById ? targetConsultationId : 0, groupId] }
   )
 
   const getText = (...values: unknown[]) => {
@@ -1484,7 +1496,7 @@ const ChatConsultationDetailContent = ({
       ? consultation.consultationId
       : undefined
 
-  const hasConsultation = Boolean(groupId && detail && consultationId)
+  const hasConsultation = Boolean(detail && consultationId)
 
   const [imageViewer, setImageViewer] = useState<{
     visible: boolean
@@ -1526,13 +1538,13 @@ const ChatConsultationDetailContent = ({
   )
 
   const scrollMarker =
-    groupId && detail
-      ? `${groupId}:${consultationId ?? "unknown"}:${initialSectionKey ?? ""}`
+    detail
+      ? `${groupId ?? "no-group"}:${consultationId ?? "unknown"}:${initialSectionKey ?? ""}`
       : null
 
   const { containerRef, setSectionRef, activeKey, scrollTo } =
     useConsultationScrollTabs({
-      enabled: Boolean(groupId && detail),
+      enabled: Boolean(detail),
       initialSectionKey,
       marker: scrollMarker,
     })
@@ -1646,12 +1658,12 @@ const ChatConsultationDetailContent = ({
 
       <ConsultationTabsBar
         activeKey={activeKey}
-        enabled={Boolean(groupId && detail && !detailError)}
+        enabled={Boolean(detail && !detailError)}
         onSelect={(key) => scrollTo(key)}
       />
 
       <div className="min-h-0 flex-1">
-        {!groupId ? (
+        {!groupId && !canQueryById ? (
           <div className="h-full px-12 pb-8 pt-6 text-[14px] leading-[22px] text-[rgba(0,0,0,0.4)]">
             请选择群聊后查看问诊详情
           </div>
@@ -1881,7 +1893,7 @@ const ChatConsultationDetailContent = ({
       <div className="border-t border-[#e7e7e7] bg-white px-12 py-4">
         <div className="flex items-center justify-between gap-6">
           <div className="text-[12px] leading-[20px] text-[rgba(0,0,0,0.4)]">
-            {!groupId
+            {!groupId && !canQueryById
               ? "请选择群聊后查看问诊"
               : !detail
               ? "暂无问诊详情"
@@ -2207,10 +2219,12 @@ const QuestionnaireDrawer = ({
   visible,
   onClose,
   initialSectionKey,
+  consultationId,
 }: {
   visible: boolean
   onClose: () => void
   initialSectionKey?: ConsultationDrawerSection
+  consultationId?: number | null
 }) => {
   return (
     <Drawer
@@ -2227,6 +2241,7 @@ const QuestionnaireDrawer = ({
         <ChatConsultationDetailContent
           onClose={onClose}
           initialSectionKey={initialSectionKey}
+          consultationId={consultationId}
         />
       ) : null}
     </Drawer>
@@ -2236,6 +2251,7 @@ const QuestionnaireDrawer = ({
 export const ChatSidebar: FC<ChatSidebarProps> = ({
   activeTab,
   consultationSection,
+  consultationId,
   onClose,
 }) => {
   const showOrders = activeTab === "orders"
@@ -2259,6 +2275,7 @@ export const ChatSidebar: FC<ChatSidebarProps> = ({
         visible={showQuestionnaire}
         onClose={onClose}
         initialSectionKey={consultationSection}
+        consultationId={consultationId}
       />
       <QtnRecordsDrawer
         visible={showQtnRecords}
