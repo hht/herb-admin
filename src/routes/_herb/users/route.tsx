@@ -23,6 +23,7 @@ import { shallow } from "zustand/shallow"
 import { buildTableColumns, type TableFieldSchema } from "~/components"
 import { useRequest } from "~/hooks/useRequest"
 import { UserBasicIcon } from "~/components/figma-icons"
+import { useHerbStore } from "~/hooks/useStore"
 import {
   getAppUserDetail,
   listAppUsers,
@@ -99,8 +100,8 @@ const renderSectionTitle = (title: string) => (
 )
 
 const TABLE_SCHEMA: TableFieldSchema<AppUser>[] = [
-  { colKey: "userId", title: "用户编号", width: 120 },
-  { colKey: "nickName", title: "用户姓名", width: 160, ellipsis: true },
+  { colKey: "userId", title: "病人编号", width: 120 },
+  { colKey: "nickName", title: "病人姓名", width: 160, ellipsis: true },
   {
     colKey: "username",
     title: "手机号",
@@ -109,7 +110,7 @@ const TABLE_SCHEMA: TableFieldSchema<AppUser>[] = [
   },
   {
     colKey: "status",
-    title: "用户状态",
+    title: "状态",
     width: 140,
     render: (row) => {
       const status = getUserStatus(row)
@@ -129,6 +130,8 @@ const TABLE_SCHEMA: TableFieldSchema<AppUser>[] = [
 ]
 
 const UserManagement = () => {
+  const currentRole = useHerbStore((state) => state.role)
+  const isAdmin = currentRole === 1
   const {
     query,
     userId,
@@ -250,14 +253,14 @@ const UserManagement = () => {
 
   const handleDelete = (user: AppUser) => {
     if (!user.userId || !user.username) {
-      MessagePlugin.error("缺少用户信息，无法删除")
+      MessagePlugin.error("缺少病人信息，无法删除")
       return
     }
     const userId = user.userId
     const username = user.username
     const dialog = DialogPlugin.confirm({
       header: "确认删除",
-      body: `确定删除用户${user.nickName ?? user.username ?? ""}吗？`,
+      body: `确定删除病人${user.nickName ?? user.username ?? ""}吗？`,
       confirmBtn: "删除",
       cancelBtn: "取消",
       onConfirm: async () => {
@@ -283,12 +286,12 @@ const UserManagement = () => {
 
   const openQtnDrawer = (user: AppUser) => {
     if (!user.userId) {
-      MessagePlugin.error("缺少用户编号")
+      MessagePlugin.error("缺少病人编号")
       return
     }
     setState({
       qtnUserId: user.userId,
-      qtnUserName: user.nickName ?? user.username ?? "用户",
+      qtnUserName: user.nickName ?? user.username ?? "病人",
       qtnVisible: true,
     })
   }
@@ -326,14 +329,16 @@ const UserManagement = () => {
           >
             问诊记录
           </Button>
-          <Button
-            theme="danger"
-            variant="text"
-            onClick={() => handleDelete(row)}
-            disabled={updateLoading}
-          >
-            删除
-          </Button>
+          {isAdmin && (
+            <Button
+              theme="danger"
+              variant="text"
+              onClick={() => handleDelete(row)}
+              disabled={updateLoading}
+            >
+              删除
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -348,7 +353,7 @@ const UserManagement = () => {
               value={userId}
               onChange={(value) => setState({ userId: value })}
               onEnter={handleSearch}
-              placeholder="请输入用户编号"
+              placeholder="请输入病人编号"
               className="w-[200px]"
               suffixIcon={<SearchIcon size={16} />}
             />
@@ -356,7 +361,7 @@ const UserManagement = () => {
               value={nickName}
               onChange={(value) => setState({ nickName: value })}
               onEnter={handleSearch}
-              placeholder="请输入用户姓名"
+              placeholder="请输入病人姓名"
               className="w-[200px]"
             />
             <Input
@@ -386,7 +391,7 @@ const UserManagement = () => {
               data={records}
               rowKey="userId"
               loading={loading}
-              empty="暂无用户数据"
+              empty="暂无病人数据"
               cellEmptyContent="-"
             />
           </div>
@@ -404,7 +409,7 @@ const UserManagement = () => {
 
       <Drawer
         className="user-drawer"
-        header={`${editing?.nickName ?? editing?.username ?? "用户"}的信息管理`}
+        header={`${editing?.nickName ?? editing?.username ?? "病人"}的信息管理`}
         visible={drawerVisible}
         placement="right"
         size="760px"
@@ -444,15 +449,15 @@ const UserManagement = () => {
             <div className="grid grid-cols-2 gap-x-8 gap-y-6">
               <Form.FormItem
                 name="nickName"
-                label={renderRequiredLabel("用户姓名")}
-                rules={[{ required: true, message: "请输入用户姓名" }]}
+                label={renderRequiredLabel("病人姓名")}
+                rules={[{ required: true, message: "请输入病人姓名" }]}
                 className="w-full"
               >
-                <Input placeholder="请输入用户姓名" />
+                <Input placeholder="请输入病人姓名" />
               </Form.FormItem>
               <Form.FormItem
                 name="userId"
-                label={renderRequiredLabel("用户编号")}
+                label={renderRequiredLabel("病人编号")}
                 className="w-full"
               >
                 <Input disabled />

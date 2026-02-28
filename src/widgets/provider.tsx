@@ -17,6 +17,7 @@ import {
   getFallbackAvatarUrl,
 } from "~/services/chat-user-profiles"
 import { CallKitProvider } from "./callkit-provider"
+import { MessageNotificationListener } from "./message-notification"
 
 const toRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : {}
@@ -549,6 +550,7 @@ export const Provider: FC<{ children: ReactNode }> = ({ children }) => {
       <EasemobAfterLoginBootstrap />
       <EasemobUserProfileSync />
       <CallKitProvider />
+      <MessageNotificationListener />
     </UIKitProvider>
   )
 }
