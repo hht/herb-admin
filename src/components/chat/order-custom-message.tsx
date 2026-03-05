@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from "react"
+import { observer } from "mobx-react-lite"
 import { DialogPlugin, MessagePlugin } from "tdesign-react"
 import { BaseMessage, type BaseMessageProps } from "easemob-chat-uikit"
 
@@ -9,6 +10,7 @@ import { useRequest } from "~/hooks/useRequest"
 type CustomMessageLike = NonNullable<BaseMessageProps["message"]> & {
   type?: string
   ext?: unknown
+  customExts?: unknown
   customEvent?: unknown
 }
 
@@ -51,7 +53,7 @@ const getOrderDescription = (value?: number) => {
   return "订单状态更新中"
 }
 
-export const OrderCustomMessage = ({
+export const OrderCustomMessage = observer(({
   message,
   messageProps,
   style,
@@ -60,11 +62,12 @@ export const OrderCustomMessage = ({
   messageProps?: BaseMessageProps
   style?: CSSProperties
 }) => {
+  const customExts = toRecord(message.customExts)
   const ext = toRecord(message.ext)
-  const title = getString(ext.title) ?? "创建订单"
-  const orderNum = getString(ext.orderNum)
-  const orderId = getNumber(ext.orderId)
-  const statusFromExt = getNumber(ext.status)
+  const title = getString(customExts.title, ext.title) ?? "创建订单"
+  const orderNum = getString(customExts.orderNum, ext.orderNum)
+  const orderId = getNumber(customExts.orderId, ext.orderId)
+  const statusFromExt = getNumber(customExts.status, ext.status)
 
   const [detailVisible, setDetailVisible] = useState(false)
   const [detailNonce, setDetailNonce] = useState(0)
@@ -176,4 +179,4 @@ export const OrderCustomMessage = ({
       />
     </div>
   )
-}
+})

@@ -182,13 +182,15 @@ const ChatWorkspace = () => {
           />
         )
       }
+      const customExts =
+        typeof message.customExts === "object" && message.customExts ? message.customExts : {}
       const ext =
         typeof message.ext === "object" && message.ext ? message.ext : {}
       const title =
-        getString(ext.title) ?? getString(message.customEvent) ?? "自定义消息"
-      const orderNum = getString(ext.orderNum)
-      const orderId = getNumber(ext.orderId)
-      const status = getNumber(ext.status)
+        getString(customExts.title) ?? getString(ext.title) ?? getString(message.customEvent) ?? "自定义消息"
+      const orderNum = getString(customExts.orderNum) ?? getString(ext.orderNum)
+      const orderId = getNumber(customExts.orderId) ?? getNumber(ext.orderId)
+      const status = getNumber(customExts.status) ?? getNumber(ext.status)
       const statusLabel = status === 1 ? "已创建" : status ? `状态${status}` : ""
 
       return (

@@ -71,12 +71,37 @@ export const MessageNotificationListener = () => {
     const audioRef = useRef<HTMLAudioElement | null>(null)
 
     useEffect(() => {
-        // 预加载音频
+        // 预加载音频 + 在首次用户交互时"解锁"浏览器 autoplay 策略
         try {
             audioRef.current = new Audio("/notification.wav")
             audioRef.current.volume = 0.6
+            // 预加载
+            audioRef.current.load()
         } catch {
             // audio not supported
+        }
+
+        // 首次点击/按键时解锁音频播放
+        const unlock = () => {
+            if (audioRef.current) {
+                // 播放一个静音操作来解锁
+                audioRef.current.play().then(() => {
+                    audioRef.current!.pause()
+                    audioRef.current!.currentTime = 0
+                }).catch(() => {
+                    // ignore
+                })
+            }
+            document.removeEventListener("click", unlock)
+            document.removeEventListener("keydown", unlock)
+        }
+
+        document.addEventListener("click", unlock, { once: true })
+        document.addEventListener("keydown", unlock, { once: true })
+
+        return () => {
+            document.removeEventListener("click", unlock)
+            document.removeEventListener("keydown", unlock)
         }
     }, [])
 
@@ -185,6 +210,40 @@ export const MessageNotificationListener = () => {
             onVideoMessage: handleIncomingMessage,
             onFileMessage: handleIncomingMessage,
             onCustomMessage: handleIncomingMessage,
+            // 消息内容修改监听 — 订单状态变化通知
+            onModifiedMessage: (msg: Record<string, unknown>) => {
+                try {
+                    const customExts = msg.customExts && typeof msg.customExts === "object"
+                        ? msg.customExts as Record<string, unknown>
+                        : {}
+                    const ext = msg.ext && typeof msg.ext === "object"
+                        ? msg.ext as Record<string, unknown>
+                        : {}
+
+                    // 检查是否为订单相关消息
+                    const orderNum = typeof customExts.orderNum === "string" ? customExts.orderNum
+                        : typeof ext.orderNum === "string" ? ext.orderNum : ""
+                    if (!orderNum) return
+
+                    const newStatus = typeof customExts.status === "number" ? customExts.status
+                        : typeof customExts.status === "string" ? Number(customExts.status) : undefined
+                    const title = typeof customExts.title === "string" ? customExts.title : ""
+
+                    if (newStatus === undefined) return
+
+                    const statusLabels: Record<number, string> = {
+                        0: "待支付", 1: "已支付", 2: "已取消", 3: "支付中", 9: "已取消",
+                    }
+                    const label = statusLabels[newStatus] ?? `状态${newStatus}`
+
+                    showNotification(
+                        title || "订单状态更新",
+                        `订单 ${orderNum} ${label}`,
+                    )
+                } catch {
+                    // ignore
+                }
+            },
             // 群组事件监听（加入新房间）
             onGroupEvent: handleGroupEvent,
         })

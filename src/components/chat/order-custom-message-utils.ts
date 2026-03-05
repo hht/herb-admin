@@ -3,6 +3,7 @@ import type { BaseMessageProps } from "easemob-chat-uikit"
 type CustomMessageLike = NonNullable<BaseMessageProps["message"]> & {
   type?: string
   ext?: unknown
+  customExts?: unknown
   customEvent?: unknown
 }
 
@@ -29,10 +30,11 @@ const getNumber = (...values: unknown[]) => {
 
 export const isOrderCustomMessage = (message: CustomMessageLike) => {
   if (!message || message.type !== "custom") return false
+  const customExts = toRecord(message.customExts)
   const ext = toRecord(message.ext)
-  const orderNum = getString(ext.orderNum)
-  const orderId = getNumber(ext.orderId)
-  const title = getString(ext.title, message.customEvent)
+  const orderNum = getString(customExts.orderNum, ext.orderNum)
+  const orderId = getNumber(customExts.orderId, ext.orderId)
+  const title = getString(customExts.title, ext.title, message.customEvent)
   if (orderNum || orderId) return true
   return Boolean(title && title.includes("订单"))
 }
