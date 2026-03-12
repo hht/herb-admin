@@ -17,6 +17,7 @@ import {
   getFallbackAvatarUrl,
 } from "~/services/chat-user-profiles"
 import { CallKitProvider } from "./callkit-provider"
+import { patchGetHistoryMessages } from "./custom-history-bridge"
 import { MessageNotificationListener } from "./message-notification"
 
 const toRecord = (value: unknown): Record<string, unknown> =>
@@ -139,6 +140,11 @@ const EasemobAfterLoginBootstrap = () => {
         return
       }
       bootstrappedRef.current = true
+
+      // 注入自建服务器历史消息降级逻辑
+      patchGetHistoryMessages(
+        rootStore as unknown as Parameters<typeof patchGetHistoryMessages>[0]
+      )
 
       try {
         const result = await typedClient.getConversationlist?.({
