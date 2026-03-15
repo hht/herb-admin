@@ -44,7 +44,7 @@ interface RootStoreShape {
 
 /**
  * 追踪每个会话从自建服务器拉取的最早消息时间戳，
- * 用于下一次请求的 endTime，实现向前翻页。
+ * 用于下一次请求的 startTime，实现向前翻页。
  */
 const customServerCursors = new Map<string, number>()
 
@@ -104,10 +104,10 @@ export function patchGetHistoryMessages(rootStore: RootStoreShape) {
     try {
       const currentUserId = getCurrentUserId(client)
 
-      // 计算 endTime: 取当前会话最早消息的 time，或取已记录的游标
-      let endTime = customServerCursors.get(conversationKey)
+      // 计算 startTime: 取当前会话最早消息的 time，或取已记录的游标
+      let startTime = customServerCursors.get(conversationKey)
 
-      if (!endTime) {
+      if (!startTime) {
         const existingMsgs =
           rootStore.messageStore?.message?.groupChat?.[options.targetId] || []
         if (existingMsgs.length > 0) {
@@ -120,20 +120,20 @@ export function patchGetHistoryMessages(rootStore: RootStoreShape) {
             },
             existingMsgs[0]
           )
-          endTime = typeof earliest.time === "number" ? earliest.time : undefined
+          startTime = typeof earliest.time === "number" ? earliest.time : undefined
         }
       }
 
       console.log(
         `[CustomHistoryBridge] Fallback to custom server for ${options.targetId}`,
-        { endTime, pageSize: options.pageSize }
+        { startTime, pageSize: options.pageSize }
       )
 
       const pageResult = await fetchCustomServerHistory({
         groupId: options.targetId,
         pageNum: 1,
         pageSize: options.pageSize || 20,
-        ...(endTime != null ? { endTime } : {}),
+        ...(startTime != null ? { startTime } : {}),
       })
 
       if (!pageResult.record || pageResult.record.length === 0) {
